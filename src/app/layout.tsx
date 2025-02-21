@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import {
+  ClerkProvider,
+  SignInButton,
+  SignUpButton,
+  SignedIn,
+  SignedOut,
+  UserButton,
+} from "@clerk/nextjs";
+import Link from "next/link";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -24,12 +33,39 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-      </body>
-    </html>
+    <ClerkProvider>
+      <html lang="en">
+        <body
+          className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-w-screen min-h-screen`}
+        >
+            <div className="h-16 mx-10 border-b-2 relative">
+              <div className="relative top-5 flex flex-row text-sm justify-center items-center">
+                <div className="basis-1/3 text-center">
+                  <Link href={"upload-image"}>Upload & Edit</Link>
+                </div>
+                <div className="basis-1/3 text-center">
+                  <Link href={"upload-image"}>Gallery</Link>
+                </div>
+                <div className="basis-1/3 flex flex-col text-center">
+                  <div>
+                    <SignedOut>
+                      <SignInButton />
+                    </SignedOut>
+                    <SignedIn>
+                      <UserButton />
+                    </SignedIn>
+                  </div>
+                  <div>
+                    <SignedOut>
+                      <SignUpButton />
+                    </SignedOut>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div>{children}</div>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }

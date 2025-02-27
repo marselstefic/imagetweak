@@ -14,10 +14,12 @@
     "@aws-sdk/lib-dynamodb": "^3.751.0",
     "@aws-sdk/util-dynamodb": "^3.751.0",
     "@clerk/nextjs": "^6.12.0",
+    "antd": "^5.24.2",
     "aws-sdk": "^2.1692.0",
     "next": "14.2.23",
     "react": "^18",
     "react-dom": "^18",
+    "react-dropzone": "^14.3.8",
     "svix": "^1.59.2"
   },
   "devDependencies": {

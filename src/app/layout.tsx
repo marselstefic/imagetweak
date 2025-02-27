@@ -8,6 +8,7 @@ import {
   SignedIn,
   SignedOut,
   UserButton,
+  useUser,
 } from "@clerk/nextjs";
 import Link from "next/link";
 
@@ -36,34 +37,34 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en">
         <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-w-screen min-h-screen`}
+          className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-w-screen min-h-screen mx-8 md:mx-36`}
         >
-            <div className="h-16 mx-10 border-b-2 relative">
-              <div className="relative top-5 flex flex-row text-sm justify-center items-center">
-                <div className="basis-1/3 text-center">
-                  <Link href={"upload-image"}>Upload & Edit</Link>
-                </div>
-                <div className="basis-1/3 text-center">
-                  <Link href={"upload-image"}>Gallery</Link>
-                </div>
-                <div className="basis-1/3 flex flex-col text-center">
-                  <div>
-                    <SignedOut>
-                      <SignInButton />
-                    </SignedOut>
-                    <SignedIn>
+          <div className="h-16 border-b-2 relative">
+            <div className="relative top-5 flex flex-row text-sm md:text-lg justify-center items-center">
+              <div className="basis-1/3 text-center">
+                <Link href={"upload-image"}>Upload & Edit</Link>
+              </div>
+              <div className="basis-1/3 text-center">
+                <Link href={"upload-image"}>Gallery</Link>
+              </div>
+              <div className="basis-1/3 flex flex-col text-center">
+                <div>
+                  <SignedOut>
+                    <SignInButton />
+                  </SignedOut>
+                  <SignedIn>
                       <UserButton />
-                    </SignedIn>
-                  </div>
-                  <div>
-                    <SignedOut>
-                      <SignUpButton />
-                    </SignedOut>
-                  </div>
+                  </SignedIn>
+                </div>
+                <div>
+                  <SignedOut>
+                    <SignUpButton />
+                  </SignedOut>
                 </div>
               </div>
             </div>
-            <div>{children}</div>
+          </div>
+          <div>{children}</div>
         </body>
       </html>
     </ClerkProvider>

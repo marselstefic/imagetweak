@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { Webhook } from "svix"; // Used for webhook verification
-import dynamoDb from "@/lib/dynamodb";
+import { dynamoDb } from "@/lib/dynamodb";
 import { ClerkWebhookUserCreated } from "@/types/ClerkWebhookTypes";
 
 const CLERK_WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET as string; // Set this in Vercel

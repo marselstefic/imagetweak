@@ -37,34 +37,37 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en">
         <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-w-screen min-h-screen mx-8 md:mx-36`}
+          className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-w-screen h-screen overflow-hidden`}
         >
-          <div className="h-16 border-b-2 relative">
+          {/* Navbar Section */}
+          <div className="h-20 bg-white border-b-2 fixed top-0 left-0 right-0 z-10">
             <div className="relative top-5 flex flex-row text-sm md:text-lg justify-center items-center">
               <div className="basis-1/3 text-center">
-                <Link href={"upload-image"}>Upload & Edit</Link>
+                <Link href={"uploads"}>Upload & Edit</Link>
               </div>
               <div className="basis-1/3 text-center">
-                <Link href={"upload-image"}>Gallery</Link>
+                <Link href={"gallery"}>Gallery</Link>
               </div>
               <div className="basis-1/3 flex flex-col text-center">
                 <div>
                   <SignedOut>
-                    <SignInButton />
+                    <div className="flex flex-col">
+                      <SignInButton />
+                      <SignUpButton />
+                    </div>
                   </SignedOut>
                   <SignedIn>
-                      <UserButton />
+                    <UserButton />
                   </SignedIn>
-                </div>
-                <div>
-                  <SignedOut>
-                    <SignUpButton />
-                  </SignedOut>
                 </div>
               </div>
             </div>
           </div>
-          <div>{children}</div>
+
+          {/* Main Content Area */}
+          <div className="flex-1 overflow-y-clip pt-20 mt-20">
+            {children}
+          </div>
         </body>
       </html>
     </ClerkProvider>

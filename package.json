@@ -10,17 +10,24 @@
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.751.0",
+    "@aws-sdk/client-ec2": "^3.775.0",
+    "@aws-sdk/client-s3": "^3.775.0",
     "@aws-sdk/credential-providers": "^3.750.0",
     "@aws-sdk/lib-dynamodb": "^3.751.0",
     "@aws-sdk/util-dynamodb": "^3.751.0",
     "@clerk/nextjs": "^6.12.0",
     "antd": "^5.24.2",
     "aws-sdk": "^2.1692.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.484.0",
     "next": "14.2.23",
     "react": "^18",
     "react-dom": "^18",
     "react-dropzone": "^14.3.8",
-    "svix": "^1.59.2"
+    "svix": "^1.59.2",
+    "tailwind-merge": "^3.0.2",
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
     "@types/node": "^20",

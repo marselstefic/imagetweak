@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import FileUpload from "@/components/FileUpload";
 import { fetchUsers } from "@/lib/actions";
@@ -16,20 +16,30 @@ export default function Home() {
     saturation: Number,
   });
 
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+  };
+
   return (
     <div className="flex justify-center min-h-screen">
-      <main className="flex flex-col p-20 pt-8"> {/* Added padding-top to avoid overlap */}
+      <main className="flex flex-col p-20 pt-8">
+        {" "}
+        {/* Added padding-top to avoid overlap */}
         <SignedOut>SIGN UP TO SEE THIS PAGE!!!!</SignedOut>
-
         <SignedIn>
-          <div className="basis-1/2 text-center">
-            <FileUpload />
-          </div>
-          <div className="basis-1/2 text-center">
-            {/** Add Parameter options here */}
+          <div className="flex flex-col p-6 bg-gray-200 rounded-xl w-80 min-h-80 shadow-md">
+            <div className="mb-4 text-center">
+              <FileUpload />
+            </div>
+            <div className="text-center">
+            <form onSubmit={handleSubmit} className="space-y-4">
+
+              </form>
+            </div>
           </div>
         </SignedIn>
       </main>
     </div>
   );
 }
+

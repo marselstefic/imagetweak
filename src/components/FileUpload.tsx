@@ -8,6 +8,7 @@ const App: React.FC = () => {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState('');
   const [firstPreview, setFirstPreview] = useState<string>('');
+  const [firstFilename, setFirstFilename] = useState<string>('');
 
   const getBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -37,8 +38,11 @@ const App: React.FC = () => {
       } else {
         setFirstPreview(first.url || (first.preview as string));
       }
+
+      setFirstFilename(first.name || '');
     } else {
       setFirstPreview('');
+      setFirstFilename('');
     }
   };
 
@@ -49,13 +53,16 @@ const App: React.FC = () => {
       <div className="flex justify-center items-center gap-6 mt-8 flex-wrap">
         {/* First Preview Image */}
         {firstPreview && (
-          <div className="relative w-[300px] h-[300px] bg-black overflow-hidden rounded-lg">
-            <Image
-              src={firstPreview}
-              className="object-cover w-full h-full"
-              onClick={() => handlePreview(fileList[0])}
-              preview={false}
-            />
+          <div className="flex flex-col items-center w-[300px]">
+            <div className="relative w-full h-[300px] bg-black overflow-hidden rounded-lg">
+              <Image
+                src={firstPreview}
+                className="object-cover w-full h-full"
+                onClick={() => handlePreview(fileList[0])}
+                preview={false}
+              />
+            </div>
+            <p className="mt-1 text-xs text-gray-600 truncate w-full text-center">{firstFilename}</p>
           </div>
         )}
 

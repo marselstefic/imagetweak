@@ -16,6 +16,7 @@
     "@aws-sdk/lib-dynamodb": "^3.751.0",
     "@aws-sdk/util-dynamodb": "^3.751.0",
     "@clerk/nextjs": "^6.12.0",
+    "@radix-ui/react-slider": "^1.2.3",
     "antd": "^5.24.2",
     "aws-sdk": "^2.1692.0",
     "class-variance-authority": "^0.7.1",

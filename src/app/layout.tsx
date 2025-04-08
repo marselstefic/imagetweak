@@ -42,7 +42,7 @@ export default function RootLayout({
           {/* Navbar Section */}
           <div className="h-20 bg-white border-b-2 fixed top-0 left-0 right-0 z-10">
             <div className="relative top-5 flex flex-row text-sm md:text-lg justify-center items-center">
-              <div className="basis-1/3 text-center">
+              <div className="basis-1/3 text-center font-geistans">
                 <Link href={"uploads"}>Upload & Edit</Link>
               </div>
               <div className="basis-1/3 text-center">

@@ -1,0 +1,12 @@
+# Use the Amazon Linux 2 Lambda base image
+FROM public.ecr.aws/lambda/python:3.8
+
+# Install OpenCV and other dependencies (gzip, tar)
+RUN yum install -y gzip tar && \
+    pip install opencv-python-headless numpy
+
+# Copy the lambda function code into the container
+COPY lambda_function.py ${LAMBDA_TASK_ROOT}
+
+# Set the entry point for the Lambda function (the handler)
+CMD ["lambda_function.lambda_handler"]

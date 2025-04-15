@@ -1,0 +1,8 @@
+Tu run and update the docker image for lambda function deployment run: Update-Image
+Edit alias: notepad . $PROFILE
+Apply allias: . $PROFILE
+The shortcut defines "Update-Image" command with the following:
+-Builds the new docker image from the dockerfile
+-Tags the new image
+-Pushes the image to ECR
+-Updates Amazon Lambda function

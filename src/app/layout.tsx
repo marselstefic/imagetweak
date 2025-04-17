@@ -37,11 +37,12 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en">
         <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-w-screen h-screen overflow-hidden`}
+          className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-w-screen`}
         >
           {/* Navbar Section */}
-          <div className="h-20 bg-white border-b-2 fixed top-0 left-0 right-0 z-10">
+          <div className="h-20 bg-white border-b-2 fixed top-0 left-0 right-0 z-50">
             <div className="relative top-5 flex flex-row text-sm md:text-lg justify-center items-center">
+            
               <div className="basis-1/3 text-center font-geistans">
                 <Link href={"uploads"}>Upload & Edit</Link>
               </div>
@@ -61,11 +62,12 @@ export default function RootLayout({
                   </SignedIn>
                 </div>
               </div>
+              
             </div>
           </div>
 
           {/* Main Content Area */}
-          <div className="flex-1 overflow-y-clip pt-20 mt-20">
+          <div className="flex-1 pt-20 mt-20">
             {children}
           </div>
         </body>

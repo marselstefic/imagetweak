@@ -6,7 +6,7 @@ import { Upload, Image } from "antd";
 import type { UploadFile, UploadProps } from "antd";
 
 type FileUploadProps = {
-  onImageChange: (images: string[]) => void;
+  onImageChange: (images: Map<string, string>) => void;
 };
 
 const FileUpload: React.FC<FileUploadProps> = ({ onImageChange }) => {
@@ -35,12 +35,12 @@ const FileUpload: React.FC<FileUploadProps> = ({ onImageChange }) => {
   const handleChange: UploadProps["onChange"] = async ({ fileList: newList }) => {
     setFileList(newList);
 
-    const base64Images: string[] = [];
+    const base64Images: Map<string,string> = new Map();
 
     for (const file of newList) {
       if (file.originFileObj) {
         const base64 = await getBase64(file.originFileObj);
-        base64Images.push(base64);
+        base64Images.set(file.name, base64);
       }
     }
 

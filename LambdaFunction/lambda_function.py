@@ -5,6 +5,7 @@ import boto3
 import cv2
 import numpy as np
 from io import BytesIO
+from datetime import datetime
 
 s3 = boto3.client("s3")
 BUCKET_NAME = "image-tweak-bucket"
@@ -22,18 +23,22 @@ def lambda_handler(event, context):
     elif http_method == "POST":
         try:
             body = json.loads(event.get("body", "{}"))
-            image_list = body.get("image", [])
-            brightness = body.get("brightness", 100)
-            contrast = body.get("contrast", 100)
-            saturation = body.get("saturation", 100)
+            image_list = body.get("image", {})
+            brightness = max(0, min(100, body.get("brightness", 50)))
+            contrast = max(0, min(100, body.get("contrast", 50)))
+            saturation = max(0, min(100, body.get("saturation", 50)))
             rotation = body.get("rotationState", 0)
+            timestamp = datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
+            overwrittenFilename = body.get("overwrittenFilename", "")
 
             if not isinstance(image_list, list) or not image_list:
                 return error_response(400, "No images provided")
 
+            multipleImages = len(image_list) > 1
+            counter = 1
             uploaded_urls = []
 
-            for image_data in image_list:
+            for filename_key, image_data in image_list.items():               
                 raw_data = base64.b64decode(image_data.split(",")[-1])
                 np_arr = np.frombuffer(raw_data, np.uint8)
                 image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
@@ -48,22 +53,28 @@ def lambda_handler(event, context):
                 image = cv2.warpAffine(image, M, (w, h))
 
                 # Brightness and Contrast adjustment
-                alpha = contrast / 100.0  # Contrast control (1.0 = original)
-                beta = (brightness - 100) * 1.0  # Brightness control (0 = original)
+                alpha = contrast / 50  # 1.0 = neutral
+                beta = (brightness - 50) * 2  # 0 = neutral
                 image = cv2.convertScaleAbs(image, alpha=alpha, beta=beta)
 
                 # Saturation adjustment
                 hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV).astype(np.float32)
-                hsv[:, :, 1] *= saturation / 100.0
+                sat_scale = saturation / 50  # 1.0 = neutral
+                hsv[:, :, 1] *= sat_scale
                 hsv[:, :, 1] = np.clip(hsv[:, :, 1], 0, 255)
+                hsv[:, :, 2] = np.clip(hsv[:, :, 2], 0, 255)  # Optional: protect value channel
                 image = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
 
                 # Encode to JPEG
                 _, buffer = cv2.imencode('.jpg', image)
                 byte_buffer = BytesIO(buffer.tobytes())
 
+                # File naming
+                base_name = overwrittenFilename or filename_key
+                suffix = f"-{counter}" if multipleImages else ""
+                file_key = f"uploads/{base_name}{suffix}_{timestamp}.jpg"
+
                 # Upload to S3
-                file_key = f"uploads/{uuid.uuid4()}.jpg"
                 s3.put_object(
                     Bucket=BUCKET_NAME,
                     Key=file_key,
@@ -71,6 +82,7 @@ def lambda_handler(event, context):
                     ContentType="image/jpeg"
                 )
                 uploaded_urls.append(f"https://{BUCKET_NAME}.s3.amazonaws.com/{file_key}")
+                counter += 1
 
             return {
                 "statusCode": 200,

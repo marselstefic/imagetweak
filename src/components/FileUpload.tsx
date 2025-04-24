@@ -1,20 +1,18 @@
-"use client";
-
 import React, { useState } from "react";
 import { PlusOutlined } from "@ant-design/icons";
 import { Upload, Image } from "antd";
 import type { UploadFile, UploadProps } from "antd";
+import path from 'path';
 
 type FileUploadProps = {
   onImageChange: (images: Map<string, string>) => void;
+  onImageSelect: (image: string) => void;
 };
 
-const FileUpload: React.FC<FileUploadProps> = ({ onImageChange }) => {
+const FileUpload: React.FC<FileUploadProps> = ({ onImageChange, onImageSelect }) => {
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState("");
-  const [firstPreview, setFirstPreview] = useState<string>("");
-  const [firstFilename, setFirstFilename] = useState<string>("");
 
   const getBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -24,13 +22,18 @@ const FileUpload: React.FC<FileUploadProps> = ({ onImageChange }) => {
       reader.onerror = (error) => reject(error);
     });
 
-  const handlePreview = async (file: UploadFile) => {
-    if (!file.url && !file.preview && file.originFileObj) {
-      file.preview = await getBase64(file.originFileObj);
-    }
-    setPreviewImage(file.url || (file.preview as string));
-    setPreviewOpen(true);
-  };
+    const handlePreview = async (file: UploadFile) => {
+      if (file.originFileObj) {
+        try {
+          const base64 = await getBase64(file.originFileObj);
+          onImageSelect(base64);  // Call your callback with the base64 value
+        } catch (error) {
+          console.error('Error converting file to base64:', error);
+        }
+      } else {
+        console.error('File origin object is not available');
+      }
+    };
 
   const handleChange: UploadProps["onChange"] = async ({ fileList: newList }) => {
     setFileList(newList);
@@ -40,7 +43,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onImageChange }) => {
     for (const file of newList) {
       if (file.originFileObj) {
         const base64 = await getBase64(file.originFileObj);
-        base64Images.set(file.name, base64);
+        base64Images.set(path.parse(file.name).name, base64);
       }
     }
 
@@ -51,68 +54,41 @@ const FileUpload: React.FC<FileUploadProps> = ({ onImageChange }) => {
       const first = newList[0];
       const base64 = await getBase64(first.originFileObj!);
       first.preview = base64;
-      setFirstPreview(base64);
-      setFirstFilename(first.name || "");
     } else {
-      setFirstPreview("");
-      setFirstFilename("");
     }
   };
 
   const remainingCount = fileList.length - 1;
 
+  const uploadButton = (
+    <button style={{ border: 0, background: 'none' }} type="button">
+      <PlusOutlined />
+      <div style={{ marginTop: 8 }}>Upload</div>
+    </button>
+  );
+
   return (
     <>
-      <div className="flex justify-center items-center gap-6 mt-8 flex-wrap">
-        {firstPreview && (
-          <div className="flex flex-col items-center w-[300px]">
-            <div className="relative w-full h-[300px] bg-black overflow-hidden rounded-lg">
-              <Image
-                src={firstPreview}
-                className="object-cover w-full h-full"
-                onClick={() => handlePreview(fileList[0])}
-                preview={false}
-              />
-            </div>
-            <p className="mt-1 text-xs text-gray-600 truncate w-full text-center">
-              {firstFilename}
-            </p>
-          </div>
-        )}
-
-        <div className="flex flex-col gap-4 items-center justify-center">
-          {remainingCount > 0 && (
-            <div className="w-[100px] h-[100px] bg-gray-100 rounded-lg flex items-center justify-center text-xl font-semibold text-gray-600 shadow-md">
-              +{remainingCount} more
-            </div>
-          )}
-
-          {fileList.length < 5 && (
-            <Upload
-              fileList={fileList}
-              onPreview={handlePreview}
-              onChange={handleChange}
-              showUploadList={false}
-              listType="picture-card"
-            >
-              <div className="w-[100px] h-[100px] bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center text-gray-500 cursor-pointer">
-                <PlusOutlined />
-                <div className="mt-1 text-xs">Upload</div>
-              </div>
-            </Upload>
-          )}
-        </div>
-      </div>
-
-      {/* Hidden Preview Modal */}
-      <Image
-        style={{ display: "none" }}
-        src={previewImage}
-        preview={{
-          visible: previewOpen,
-          onVisibleChange: (visible) => setPreviewOpen(visible),
-        }}
-      />
+      <Upload
+        action="https://660d2bd96ddfa2943b33731c.mockapi.io/api/upload"
+        listType="picture-card"
+        fileList={fileList}
+        onPreview={handlePreview}
+        onChange={handleChange}
+      >
+        {fileList.length >= 8 ? null : uploadButton}
+      </Upload>
+      {previewImage && (
+        <Image
+          wrapperStyle={{ display: 'none' }}
+          preview={{
+            visible: previewOpen,
+            onVisibleChange: (visible) => setPreviewOpen(visible),
+            afterOpenChange: (visible) => !visible && setPreviewImage(''),
+          }}
+          src={previewImage}
+        />
+      )}
     </>
   );
 };

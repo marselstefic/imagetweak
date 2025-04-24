@@ -31,8 +31,8 @@ def lambda_handler(event, context):
             timestamp = datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
             overwrittenFilename = body.get("overwrittenFilename", "")
 
-            if not isinstance(image_list, list) or not image_list:
-                return error_response(400, "No images provided")
+            if not isinstance(image_list, dict) or not image_list:
+                return error_response(400, "No images provided: " + type(image_list).__name__ + image_list)
 
             multipleImages = len(image_list) > 1
             counter = 1

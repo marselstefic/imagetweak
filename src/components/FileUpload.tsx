@@ -63,18 +63,18 @@ const FileUpload: React.FC<FileUploadProps> = ({ onImageChange, onImageSelect })
   const uploadButton = (
     <button style={{ border: 0, background: 'none' }} type="button">
       <PlusOutlined />
-      <div style={{ marginTop: 8 }}>Upload</div>
+      <div>Upload</div>
     </button>
   );
 
   return (
     <>
       <Upload
-        action="https://660d2bd96ddfa2943b33731c.mockapi.io/api/upload"
         listType="picture-card"
         fileList={fileList}
         onPreview={handlePreview}
         onChange={handleChange}
+        className="custom-upload-sm"
       >
         {fileList.length >= 8 ? null : uploadButton}
       </Upload>
@@ -87,6 +87,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onImageChange, onImageSelect })
             afterOpenChange: (visible) => !visible && setPreviewImage(''),
           }}
           src={previewImage}
+          className="custom-upload"
         />
       )}
     </>

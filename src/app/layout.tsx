@@ -10,18 +10,8 @@ import {
   UserButton,
   useUser,
 } from "@clerk/nextjs";
+import { Upload, Images } from "lucide-react";
 import Link from "next/link";
-
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-  weight: "100 900",
-});
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",
-  weight: "100 900",
-});
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -37,22 +27,40 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en">
         <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-w-screen`}
+          className={`antialiased flex flex-col min-w-screen`}
         >
           {/* Navbar Section */}
           <div className="h-20 bg-white border-b-2 fixed top-0 left-0 right-0 z-50">
-            <div className="relative top-5 flex flex-row text-sm md:text-lg justify-center items-center">
-            
-              <div className="basis-1/3 text-center font-geistans">
-                <Link href={"uploads"}>Upload & Edit</Link>
+            <div className="relative top-5 flex flex-row text-sm md:text-lg justify-center gap-x-28 items-center font-poppins">
+              {/* Upload & Edit */}
+              <div className="w-32 text-center">
+                <Link href="/uploads">
+                  <div className="relative">
+                    <p>Upload & Edit</p>
+                    <div className="opacity-15 absolute -right-3 -top-5">
+                      <Upload className="w-14 h-14" />
+                    </div>
+                  </div>
+                </Link>
               </div>
-              <div className="basis-1/3 text-center">
-                <Link href={"gallery"}>Gallery</Link>
+
+              {/* Gallery */}
+              <div className="w-32 text-center">
+                <Link href="/gallery">
+                  <div className="relative">
+                    <p>Gallery</p>
+                    <div className="opacity-15 absolute -right-0 -top-5">
+                      <Images className="w-14 h-14" />
+                    </div>
+                  </div>
+                </Link>
               </div>
-              <div className="basis-1/3 flex flex-col text-center">
-                <div>
+
+              {/* Account */}
+              <div className="w-32 text-center">
+                <div className="relative">
                   <SignedOut>
-                    <div className="flex flex-col">
+                    <div className="flex flex-col gap-1 items-center">
                       <SignInButton />
                       <SignUpButton />
                     </div>
@@ -60,16 +68,16 @@ export default function RootLayout({
                   <SignedIn>
                     <UserButton />
                   </SignedIn>
+                  <div className="opacity-15 absolute -right-3 -top-3">
+                    <Upload className="w-14 h-14" />
+                  </div>
                 </div>
               </div>
-              
             </div>
           </div>
 
           {/* Main Content Area */}
-          <div className="flex-1 pt-20 mt-20">
-            {children}
-          </div>
+          <div className="flex-1 pt-20">{children}</div>
         </body>
       </html>
     </ClerkProvider>

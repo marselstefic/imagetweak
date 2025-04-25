@@ -1,6 +1,8 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+@import "@fontsource/poppins/400.css";  /* or other weights */
+@import "@fontsource/poppins/700.css";
 
 /* @media (prefers-color-scheme: dark) {
   :root {
@@ -86,4 +88,15 @@
 
 .ant-tooltip {
   display: none !important;
+}
+
+/* For small screens */
+@media (max-width: 767px) {
+  .custom-upload-sm .ant-upload {
+    width: 70px !important;
+    height: 70px !important;
+    display: flex !important;
+    justify-content: center;
+    align-items: center;
+  }
 }

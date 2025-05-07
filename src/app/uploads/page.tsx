@@ -1,44 +1,69 @@
 "use client";
 
 import FileUpload from "@/components/FileUpload";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
-import { SignedIn, SignedOut } from "@clerk/nextjs";
-import { useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
+import { Toaster } from "@/components/ui/toaster";
+import { useToast } from "@/hooks/use-toast";
+import { uploadImageMetaData } from "@/lib/actions";
+import { ImageMetaData } from "@/types/ImageMetaData";
+import { SignedIn, SignedOut, useUser } from "@clerk/nextjs";
+import { UserResource } from "@clerk/types";
 import { Upload } from "lucide-react";
+import { useEffect, useState } from "react";
+import { v4 as uuidv4 } from "uuid";
 
+type ImageParameters = {
+  overwrittenFilename: string;
+  resX: number;
+  resY: number;
+  rotationState: number;
+  brightness: number;
+  contrast: number;
+  saturation: number;
+};
+
+type ImageData = {
+  uploadId: string,
+  image: object;
+  imageParameters: ImageParameters;
+};
 
 export default function Home() {
+  const { isSignedIn, user } = useUser();
+  const [activeUser, setActiveUser] = useState<
+    UserResource | undefined | null
+  >();
+
+  const [images, setImages] = useState<Map<string, string>>(new Map());
+  const [selectedImage, setSelectedImage] = useState("");
+  const [imageUploaded, setImageUploaded] = useState(false);
+  const [overwriteToggle, setOverwriteToggle] = useState(false);
+  const [overwrittenFilename, setOverwrittenFilename] = useState("");
+
   const [brightness, setBrightness] = useState([50]);
   const [contrast, setContrast] = useState([50]);
   const [saturation, setSaturation] = useState([50]);
-  const [overwriteToggle, setOverwriteToggle] = useState(false);
-  const [overwrittenFilename, setOverwrittenFilename] = useState("");
-  const [images, setImages] = useState<Map<string, string>>(new Map());
-  const [selectedImage, setSelectedImage] = useState("");
 
-  const [imageUploaded, setImageUploaded] = useState<boolean>(false); // Track if an image is uploaded
+  const { toast } = useToast();
 
-  type imageData = {
-    overwrittenFilename: string;
-    image: Object;
-    resX: number;
-    resY: number;
-    rotationState: number;
-    brightness: number;
-    contrast: number;
-    saturation: number;
-  };
+  useEffect(() => {
+    if (isSignedIn) {
+      setActiveUser(user);
+    }
+  }, [isSignedIn, user]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const imageParametersExample: imageData = {
-      overwrittenFilename: overwrittenFilename,
-      image: Object.fromEntries(images),
+
+    const uploadId = uuidv4();
+
+    const imageParameters: ImageParameters = {
+      overwrittenFilename,
       resX: 2,
       resY: 2,
       rotationState: 2,
@@ -46,16 +71,85 @@ export default function Home() {
       contrast: contrast[0],
       saturation: saturation[0],
     };
-    console.log("images: " + images);
 
-    fetch(
-      "https://9v6q30w9i6.execute-api.eu-central-1.amazonaws.com/ImageProcessing",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(imageParametersExample),
-      }
-    );
+    const imageData: ImageData = {
+      uploadId: uploadId,
+      image: Object.fromEntries(images),
+      imageParameters,
+    };
+
+    const imageMetaData: ImageMetaData = {
+      uploadId: uploadId,
+      user: activeUser?.id,
+      uploadedImage: null,
+      startTime: getFormattedDate(),
+    };
+
+    console.log("images: ", images);
+
+    //Upload imageMetaData
+    try {
+      uploadImageMetaData(imageMetaData);
+    } catch (error) {
+      console.error(error);
+      toast({
+        variant: "destructive",
+        title: "Upload Failed",
+        description: "An error occurred during upload to dynamoDb. Please try again.",
+      });
+    }
+
+    //I don't use s3client object because the final s3 upload is done in Lambda code
+    try {
+      const response = await fetch(
+        "https://9v6q30w9i6.execute-api.eu-central-1.amazonaws.com/ImageProcessing",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(imageData),
+        }
+      );
+
+      toast({
+        title: "Upload Successful",
+        description: "Your image was uploaded to S3 and metadata saved to DynamoDB.",
+        duration: 5000,
+      });
+
+      return response;
+    } catch (s3Error) {
+      console.error("S3 upload failed:", s3Error);
+
+      await fetch(
+        "https://9v6q30w9i6.execute-api.eu-central-1.amazonaws.com/ImageProcessing",
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(imageData),
+        }
+      );
+
+      toast({
+        variant: "destructive",
+        title: "S3 Upload Failed",
+        description: "Failed to upload image to S3. Please try again.",
+      });
+
+      return; // Exit early since S3 upload is critical
+    }
+  };
+
+  const getFormattedDate = () => {
+    const now = new Date();
+    const [d, m, y, h, min, s] = [
+      now.getDate(),
+      now.getMonth() + 1,
+      now.getFullYear(),
+      now.getHours(),
+      now.getMinutes(),
+      now.getSeconds(),
+    ];
+    return `${d}.${m}.${y}_${h}:${min}:${s}`;
   };
 
   return (
@@ -66,9 +160,7 @@ export default function Home() {
         <SignedIn>
           {/* Upload Section */}
           <div className="shadow-md w-full">
-            <div
-              className={`flex flex-row w-full`}
-            >
+            <div className={`flex flex-row w-full`}>
               {/* Left: Title + Upload */}
               <div
                 className={`${
@@ -193,7 +285,9 @@ export default function Home() {
                           <Label>{saturation}</Label>
                         </div>
                       </div>
-                      <Button className="flex flex-row">Save & Upload <Upload></Upload></Button>
+                      <Button>
+                        Save & Upload <Upload></Upload>
+                      </Button>
                     </form>
                   </TabsContent>
                   <TabsContent value="format">TODO</TabsContent>
@@ -201,6 +295,7 @@ export default function Home() {
               </div>
             )}
           </div>
+          <Toaster/>
         </SignedIn>
       </main>
     </div>

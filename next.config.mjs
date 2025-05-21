@@ -1,8 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   eslint: {
-    ignoreDuringBuilds: true, // Disables ESLint checks during build
+    ignoreDuringBuilds: true,
   },
+  reactStrictMode: false,
 };
 
 export default nextConfig;

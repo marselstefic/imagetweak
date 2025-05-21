@@ -7,12 +7,13 @@ import numpy as np
 from io import BytesIO
 from datetime import datetime
 from botocore.exceptions import ClientError
+import traceback
 
 s3 = boto3.client("s3")
 BUCKET_NAME = "image-tweak-bucket"
 
 dynamodb = boto3.resource('dynamodb', region_name='eu-central-1')
-table = dynamodb.Table('ImageMetaData') 
+table = dynamodb.Table('ImageMetaData')
 
 def lambda_handler(event, context):
     http_method = event.get("requestContext", {}).get("http", {}).get("method", "")
@@ -26,25 +27,31 @@ def lambda_handler(event, context):
 
     elif http_method == "POST":
         try:
-            body = json.loads(event.get("body", "{}"))
+            body_raw = event.get("body", "{}")
+            print(f"Request body length: {len(body_raw)}")  # Debug payload size
+            body = json.loads(body_raw)
+
             image_list = body.get("image", {})
             brightness = max(0, min(100, body.get("brightness", 50)))
             contrast = max(0, min(100, body.get("contrast", 50)))
             saturation = max(0, min(100, body.get("saturation", 50)))
             rotation = body.get("rotationState", 0)
-            timestamp = datetime.now().strftime("%d_%m_%Y_%H_%M_%S")
             overwrittenFilename = body.get("overwrittenFilename", "")
             uploadId = body.get("uploadId", "")
 
+            print(f"Upload ID: {uploadId}") 
+            print(f"image_list: {image_list}") 
+
+            if not uploadId:
+                return error_response(400, "Missing uploadId")
 
             if not isinstance(image_list, dict) or not image_list:
-                return error_response(400, "No images provided: " + type(image_list).__name__ + image_list)
+                return error_response(400, f"No images provided. Type: {type(image_list).__name__}")
 
-            multipleImages = len(image_list) > 1
-            counter = 1
+            imageFileNames = []
             uploaded_urls = []
 
-            for filename_key, image_data in image_list.items():               
+            for filename_key, image_data in image_list.items():
                 raw_data = base64.b64decode(image_data.split(",")[-1])
                 np_arr = np.frombuffer(raw_data, np.uint8)
                 image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
@@ -59,16 +66,16 @@ def lambda_handler(event, context):
                 image = cv2.warpAffine(image, M, (w, h))
 
                 # Brightness and Contrast
-                alpha = contrast / 50  
-                beta = (brightness - 50) * 2  
+                alpha = contrast / 50
+                beta = (brightness - 50) * 2
                 image = cv2.convertScaleAbs(image, alpha=alpha, beta=beta)
 
-                # Saturation 
+                # Saturation
                 hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV).astype(np.float32)
-                sat_scale = saturation / 50  # 1.0 = neutral
+                sat_scale = saturation / 50
                 hsv[:, :, 1] *= sat_scale
                 hsv[:, :, 1] = np.clip(hsv[:, :, 1], 0, 255)
-                hsv[:, :, 2] = np.clip(hsv[:, :, 2], 0, 255) 
+                hsv[:, :, 2] = np.clip(hsv[:, :, 2], 0, 255)
                 image = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
 
                 # Encode to JPEG
@@ -77,45 +84,50 @@ def lambda_handler(event, context):
 
                 # File naming
                 base_name = overwrittenFilename or filename_key
-                suffix = f"-{counter}" if multipleImages else ""
-                file_key = f"uploads/{base_name}{suffix}_{timestamp}.jpg"
+                newUuid = uuid.uuid4()
+                file_key = f"{base_name}_{str(newUuid)}.jpg"
+                imageFileNames.append(file_key)
 
                 # Upload to S3
                 s3.put_object(
                     Bucket=BUCKET_NAME,
-                    Key=file_key,
+                    Key=f"uploads/{file_key}",
                     Body=byte_buffer,
                     ContentType="image/jpeg"
                 )
-                uploaded_urls.append(f"https://{BUCKET_NAME}.s3.amazonaws.com/{file_key}")
-                counter += 1
+                uploaded_urls.append(f"https://{BUCKET_NAME}.s3.amazonaws.com/uploads/{file_key}")
+        except Exception as e:
+            error_msg = f"Unexpected error [{type(e).__name__}]: {str(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            return error_response(500, error_msg)
 
-            try:
-                response = table.update_item(
+        try:
+            response = table.update_item(
                 Key={
                     'uploadId': uploadId,
                 },
                 UpdateExpression="SET uploadedImage = :newVal",
                 ExpressionAttributeValues={
-                    ':newVal': list(image_list.keys())
+                    ':newVal': imageFileNames
                 },
                 ReturnValues="UPDATED_NEW"
-                )
-                print("Update succeeded:", response)
-                return {
-                    "statusCode": 200,
-                    "body": json.dumps({"uploaded": uploaded_urls}),
-                    "headers": cors_headers()
-                }
-            except ClientError as e:
-                print("Update failed:", e.response['Error']['Message'])
-                raise
-        except Exception as e:
-            return error_response(500, str(e))
+            )
+            print("DynamoDB update succeeded:", response)
+            return {
+                "statusCode": 200,
+                "body": json.dumps({"uploaded": uploaded_urls}),
+                "headers": cors_headers()
+            }
+        except ClientError as e:
+            error_msg = "Image metaData upload failed: " + e.response['Error']['Message']
+            print(error_msg)
+            return error_response(500, error_msg)
 
     elif http_method == "DELETE":
         body = json.loads(event.get("body", "{}"))
         image_list = body.get("image", {})
+        uploadId = body.get("uploadId", "")
+
         try:
             response = table.delete_item(
                 Key={
@@ -127,12 +139,13 @@ def lambda_handler(event, context):
                 "statusCode": 200,
                 "body": json.dumps({
                     "message": "File deleted successfully.",
-                    "deletedUrl": f"https://{BUCKET_NAME}.s3.amazonaws.com/{uploadId}"
                 }),
             }
         except ClientError as e:
-            print("Delete failed:", e.response['Error']['Message'])
-            raise
+            error_msg = "Delete failed: " + e.response['Error']['Message']
+            print(error_msg)
+            return error_response(500, error_msg)
+
     else:
         return error_response(405, "Method not allowed. Only POST supported.")
 

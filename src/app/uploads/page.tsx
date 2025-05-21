@@ -9,29 +9,15 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
-import { uploadImageMetaData } from "@/lib/actions";
+import { uploadImage, uploadImageMetaData } from "@/lib/actions";
 import { ImageMetaData } from "@/types/ImageMetaData";
+import { ImageParameters } from "@/types/ImageParameters";
+import { ImageDatatype } from "@/types/ImageDatatype";
 import { SignedIn, SignedOut, useUser } from "@clerk/nextjs";
 import { UserResource } from "@clerk/types";
 import { Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-
-type ImageParameters = {
-  overwrittenFilename: string;
-  resX: number;
-  resY: number;
-  rotationState: number;
-  brightness: number;
-  contrast: number;
-  saturation: number;
-};
-
-type ImageData = {
-  uploadId: string,
-  image: object;
-  imageParameters: ImageParameters;
-};
 
 export default function Home() {
   const { isSignedIn, user } = useUser();
@@ -50,6 +36,8 @@ export default function Home() {
   const [saturation, setSaturation] = useState([50]);
 
   const { toast } = useToast();
+
+  let uploadSuccessful = false;
 
   useEffect(() => {
     if (isSignedIn) {
@@ -72,7 +60,7 @@ export default function Home() {
       saturation: saturation[0],
     };
 
-    const imageData: ImageData = {
+    const imageData: ImageDatatype = {
       uploadId: uploadId,
       image: Object.fromEntries(images),
       imageParameters,
@@ -97,7 +85,21 @@ export default function Home() {
         title: "Upload Failed",
         description: "An error occurred during upload to dynamoDb. Please try again.",
       });
+      return;
     }
+
+      //Upload imageMetaData
+      try {
+        uploadImage(imageData);
+      } catch (error) {
+        console.error(error);
+        toast({
+          variant: "destructive",
+          title: "Upload Failed",
+          description: "An error occurred during upload to dynamoDb. Please try again.",
+        });
+        return;
+      }
 
     //I don't use s3client object because the final s3 upload is done in Lambda code
     try {
@@ -105,37 +107,38 @@ export default function Home() {
         "https://9v6q30w9i6.execute-api.eu-central-1.amazonaws.com/ImageProcessing",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(imageData),
+          headers: { "Content-Type": "application/json" }
         }
       );
 
-      toast({
-        title: "Upload Successful",
-        description: "Your image was uploaded to S3 and metadata saved to DynamoDB.",
-        duration: 5000,
-      });
-
-      return response;
+      if(response.status != 500){
+        uploadSuccessful = true;
+        toast({
+          title: "Upload Successful",
+          description: "Your image was uploaded to S3 and metadata saved to DynamoDB.",
+          duration: 5000,
+        });
+        return response;
+      }
     } catch (s3Error) {
       console.error("S3 upload failed:", s3Error);
-
-      await fetch(
-        "https://9v6q30w9i6.execute-api.eu-central-1.amazonaws.com/ImageProcessing",
-        {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(imageData),
-        }
-      );
-
-      toast({
-        variant: "destructive",
-        title: "S3 Upload Failed",
-        description: "Failed to upload image to S3. Please try again.",
-      });
-
-      return; // Exit early since S3 upload is critical
+    } finally {
+      if (!uploadSuccessful) {
+        await fetch(
+          "https://9v6q30w9i6.execute-api.eu-central-1.amazonaws.com/ImageProcessing",
+          {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(imageData),
+          }
+        );
+    
+        toast({
+          variant: "destructive",
+          title: "S3 Upload Failed",
+          description: "Failed to upload image to S3. Please try again.",
+        });
+      }
     }
   };
 

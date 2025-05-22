@@ -10,7 +10,7 @@ import {
   UserButton,
   useUser,
 } from "@clerk/nextjs";
-import { Upload, Images } from "lucide-react";
+import { Upload, Images, LogIn } from "lucide-react";
 import Link from "next/link";
 
 export const metadata: Metadata = {
@@ -26,9 +26,7 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en">
-        <body
-          className={`antialiased flex flex-col min-w-screen`}
-        >
+        <body className={`antialiased flex flex-col min-w-screen`}>
           {/* Navbar Section */}
           <div className="h-20 bg-white border-b-2 fixed top-0 left-0 right-0 z-50">
             <div className="relative top-5 flex flex-row text-sm md:text-lg justify-center gap-x-28 items-center font-poppins">
@@ -60,17 +58,32 @@ export default function RootLayout({
               <div className="w-32 text-center">
                 <div className="relative">
                   <SignedOut>
-                    <div className="flex flex-col gap-1 items-center">
+                    <div className="flex flex-row gap-1 items-center w-36">
                       <SignInButton />
+                      |
                       <SignUpButton />
+                    </div>
+                    <div className="opacity-15 absolute -right-0 -top-5">
+                      <LogIn className="w-14 h-14" />
                     </div>
                   </SignedOut>
                   <SignedIn>
-                    <UserButton />
+                    <div className="pt-2">
+                      <UserButton
+                        appearance={{
+                          elements: {
+                            userButtonAvatarBox: {
+                              width: "30px", // Increase width
+                              height: "30px", // Increase height
+                            },
+                          },
+                        }}
+                      />
+                    </div>
+                    <div className="opacity-15 absolute right-2 -top-3">
+                      <LogIn className="w-14 h-14" />
+                    </div>
                   </SignedIn>
-                  <div className="opacity-15 absolute -right-3 -top-3">
-                    <Upload className="w-14 h-14" />
-                  </div>
                 </div>
               </div>
             </div>

@@ -7,10 +7,9 @@ import { useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Upload } from "lucide-react";
-
 
 export default function Home() {
   const [brightness, setBrightness] = useState([50]);
@@ -66,16 +65,14 @@ export default function Home() {
         <SignedIn>
           {/* Upload Section */}
           <div className="shadow-md w-full">
-            <div
-              className={`flex flex-row w-full`}
-            >
+            <div className={`flex flex-row w-full`}>
               {/* Left: Title + Upload */}
               <div
                 className={`${
                   imageUploaded ? "md:w-1/3" : "w-full"
-                } flex flex-col items-center pt-6 bg-gray-100`}
+                } flex flex-col items-center p-6 bg-gray-100`}
               >
-                <div className="text-2xl text-center w-full">
+                <div className="text-2xl text-center w-full p-6">
                   Upload Library
                 </div>
 
@@ -98,7 +95,7 @@ export default function Home() {
               {/* Right: Image Preview */}
               {imageUploaded && (
                 <div className="md:w-2/3 flex items-center justify-center bg-gray-900/85 bg-gradient-to-tr">
-                  <div className="w-full md:w-1/2 max-h-[80vh] flex items-center justify-center overflow-hidden">
+                  <div className="w-full md:w-1/2 h-[60vh] flex items-center justify-center overflow-hidden">
                     <img
                       src={selectedImage}
                       alt="Uploaded Preview"
@@ -110,9 +107,9 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="bg-gray-200 p-6 shadow-md w-full flex-col">
-            {/* 2.1 Toolbar + Parameters */}
-            {imageUploaded && (
+          {/* 2.1 Toolbar + Parameters */}
+          {imageUploaded && (
+            <div className="bg-gray-200 p-6 shadow-md w-full flex-col">
               <div className="pl-12">
                 {/* Toolbar */}
                 <Tabs defaultValue="colors" className="w-[400px]">
@@ -193,14 +190,16 @@ export default function Home() {
                           <Label>{saturation}</Label>
                         </div>
                       </div>
-                      <Button className="flex flex-row">Save & Upload <Upload></Upload></Button>
+                      <Button className="flex flex-row">
+                        Save & Upload <Upload></Upload>
+                      </Button>
                     </form>
                   </TabsContent>
                   <TabsContent value="format">TODO</TabsContent>
                 </Tabs>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </SignedIn>
       </main>
     </div>

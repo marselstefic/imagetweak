@@ -12,7 +12,6 @@ import { useToast } from "@/hooks/use-toast";
 import { uploadImage, uploadImageMetaData } from "@/lib/actions";
 import { ImageMetaData } from "@/types/ImageMetaData";
 import { ImageParameters } from "@/types/ImageParameters";
-import { ImageDatatype } from "@/types/ImageDatatype";
 import { SignedIn, SignedOut, useUser } from "@clerk/nextjs";
 import { UserResource } from "@clerk/types";
 import { Upload } from "lucide-react";
@@ -25,7 +24,7 @@ export default function Home() {
     UserResource | undefined | null
   >();
 
-  const [images, setImages] = useState<Map<string, string>>(new Map());
+  const [imageFiles, setImageFiles] = useState<File[]>([]); 
   const [selectedImage, setSelectedImage] = useState("");
   const [imageUploaded, setImageUploaded] = useState(false);
   const [overwriteToggle, setOverwriteToggle] = useState(false);
@@ -47,9 +46,9 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-
+  
     const uploadId = uuidv4();
-
+  
     const imageParameters: ImageParameters = {
       overwrittenFilename,
       resX: 2,
@@ -59,87 +58,59 @@ export default function Home() {
       contrast: contrast[0],
       saturation: saturation[0],
     };
-
-    const imageData: ImageDatatype = {
-      uploadId: uploadId,
-      image: Object.fromEntries(images),
-      imageParameters,
-    };
-
+  
     const imageMetaData: ImageMetaData = {
       uploadId: uploadId,
       user: activeUser?.id,
-      uploadedImage: null,
+      imageName: imageFiles.map((file) => file.name), // array of filenames
       startTime: getFormattedDate(),
+      imageParameters,
     };
-
-    console.log("images: ", images);
-
-    //Upload imageMetaData
+  
     try {
-      uploadImageMetaData(imageMetaData);
+      await uploadImageMetaData(imageMetaData);
     } catch (error) {
-      console.error(error);
       toast({
         variant: "destructive",
         title: "Upload Failed",
-        description: "An error occurred during upload to dynamoDb. Please try again.",
+        description: "An error occurred during upload to DynamoDB. Please try again.",
       });
       return;
     }
-
-      //Upload imageMetaData
-      try {
-        uploadImage(imageData);
-      } catch (error) {
-        console.error(error);
-        toast({
-          variant: "destructive",
-          title: "Upload Failed",
-          description: "An error occurred during upload to dynamoDb. Please try again.",
-        });
-        return;
-      }
-
-    //I don't use s3client object because the final s3 upload is done in Lambda code
+  
+    // Create FormData with all files
+    const formData = new FormData();
+    formData.append("metadata", new Blob([JSON.stringify(imageMetaData)], { type: "application/json" }));
+    imageFiles.forEach((file) => formData.append("files", file));
+  
     try {
-      const response = await fetch(
-        "https://9v6q30w9i6.execute-api.eu-central-1.amazonaws.com/ImageProcessing",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" }
-        }
-      );
-
-      if(response.status != 500){
-        uploadSuccessful = true;
-        toast({
-          title: "Upload Successful",
-          description: "Your image was uploaded to S3 and metadata saved to DynamoDB.",
-          duration: 5000,
-        });
-        return response;
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Upload failed');
       }
-    } catch (s3Error) {
-      console.error("S3 upload failed:", s3Error);
-    } finally {
-      if (!uploadSuccessful) {
-        await fetch(
-          "https://9v6q30w9i6.execute-api.eu-central-1.amazonaws.com/ImageProcessing",
-          {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(imageData),
-          }
-        );
-    
-        toast({
-          variant: "destructive",
-          title: "S3 Upload Failed",
-          description: "Failed to upload image to S3. Please try again.",
-        });
-      }
+      
+      const result = await response.json();
+      console.log("Backend upload result:", result);
+      toast({
+        title: "Upload Successful",
+        description: "Your image was uploaded to S3 and metadata saved to DynamoDB.",
+        duration: 5000,
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Upload Failed",
+        description: "An error occurred uploading your images. Please try again.",
+      });
+      return;
     }
+  
+    // Reset state or do whatever you want next
   };
 
   const getFormattedDate = () => {
@@ -175,15 +146,16 @@ export default function Home() {
                 </div>
 
                 <FileUpload
-                  onImageChange={(base64Images) => {
-                    setImages(base64Images);
+                  onImageChange={(filesMap) => {
+                    setImageFiles(Array.from(filesMap.values()));
                     setImageUploaded(true);
                     if (selectedImage === "") {
-                      const firstImage =
-                        base64Images.size > 0
-                          ? base64Images.entries().next().value
-                          : undefined;
-                      setSelectedImage(firstImage ? firstImage[1] : "");
+                      // For preview, generate a URL for the first file
+                      const firstFile = filesMap.values().next().value;
+                      if (firstFile) {
+                        const url = URL.createObjectURL(firstFile);
+                        setSelectedImage(url);
+                      }
                     }
                   }}
                   onImageSelect={setSelectedImage}
@@ -296,8 +268,8 @@ export default function Home() {
                   <TabsContent value="format">TODO</TabsContent>
                 </Tabs>
               </div>
+            </div>
             )}
-          </div>
           <Toaster/>
         </SignedIn>
       </main>

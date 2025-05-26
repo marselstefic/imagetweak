@@ -2,10 +2,9 @@ import React, { useState } from "react";
 import { PlusOutlined } from "@ant-design/icons";
 import { Upload, Image } from "antd";
 import type { UploadFile, UploadProps } from "antd";
-import path from 'path';
 
 type FileUploadProps = {
-  onImageChange: (images: Map<string, string>) => void;
+  onImageChange: (images: Map<string, File>) => void; // Changed to File instead of base64 string
   onImageSelect: (image: string) => void;
 };
 
@@ -14,6 +13,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onImageChange, onImageSelect })
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState("");
 
+  //im keeping getBase64 only for preview generation
   const getBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -22,43 +22,40 @@ const FileUpload: React.FC<FileUploadProps> = ({ onImageChange, onImageSelect })
       reader.onerror = (error) => reject(error);
     });
 
-    const handlePreview = async (file: UploadFile) => {
-      if (file.originFileObj) {
-        try {
-          const base64 = await getBase64(file.originFileObj);
-          onImageSelect(base64);  // Call your callback with the base64 value
-        } catch (error) {
-          console.error('Error converting file to base64:', error);
-        }
-      } else {
-        console.error('File origin object is not available');
+  const handlePreview = async (file: UploadFile) => {
+    if (file.originFileObj) {
+      try {
+        const base64 = await getBase64(file.originFileObj);
+        setPreviewImage(base64);
+        setPreviewOpen(true);
+        onImageSelect(base64);  // still sends base64 for preview use
+      } catch (error) {
+        console.error('Error converting file to base64:', error);
       }
-    };
+    } else {
+      console.error('File origin object is not available');
+    }
+  };
 
   const handleChange: UploadProps["onChange"] = async ({ fileList: newList }) => {
     setFileList(newList);
 
-    const base64Images: Map<string,string> = new Map();
+    const fileMap: Map<string, File> = new Map();
 
     for (const file of newList) {
       if (file.originFileObj) {
-        const base64 = await getBase64(file.originFileObj);
-        base64Images.set(path.parse(file.name).name, base64);
+        fileMap.set(file.name, file.originFileObj);
       }
     }
 
-    // Send base64 images to parent
-    onImageChange(base64Images);
+    onImageChange(fileMap);
 
-    if (newList.length > 0) {
-      const first = newList[0];
-      const base64 = await getBase64(first.originFileObj!);
-      first.preview = base64;
-    } else {
+    // Generate preview for first file in the list
+    if (newList.length > 0 && newList[0].originFileObj) {
+      const base64 = await getBase64(newList[0].originFileObj);
+      newList[0].preview = base64;
     }
   };
-
-  const remainingCount = fileList.length - 1;
 
   const uploadButton = (
     <button style={{ border: 0, background: 'none' }} type="button">

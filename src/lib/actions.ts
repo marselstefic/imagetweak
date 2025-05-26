@@ -2,37 +2,49 @@
 
 import { ImageMetaData } from "@/types/ImageMetaData";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import { PutCommand, PutCommandOutput, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  PutCommand,
+  PutCommandOutput,
+  QueryCommand,
+} from "@aws-sdk/lib-dynamodb";
 import { dynamoDb, s3Client } from "./dynamodb";
-import { ImageDatatype } from "@/types/ImageDatatype";
 
-export async function uploadImage(imageData: ImageDatatype): Promise<PutCommandOutput> {
-  try {
-    const names = Object.keys(imageData.image);
-    const base64Encodes = Object.values(imageData.image);
-    for(let i = 0; i < names.length; i++){
-      const params = {
-        Bucket: process.env.AWS_S3_BUCKET_NAME,
-        Key: `uploads/${names[i]}`,
-        Body: base64Encodes,
-        ContentType: image.type,
-      };
-  
-      const command = new PutObjectCommand(params);
-  
-      await s3Client.send(command);
-    }
-    
+type UploadImageParams = {
+  imageMetaData: ImageMetaData;
+  files: Array<{
+    buffer: Buffer | Uint8Array;
+    name: string;
+    contentType: string;
+  }>;
+};
 
-    return `https://${params.Bucket}.s3.${process.env.AWS_REGION}.amazonaws.com/${params.Key}`;
-  } catch (error) {
-    console.error("S3 Upload Error:", error);
-    throw new Error("Failed to upload image");
-  }
+import sharp from "sharp";
+
+export async function uploadImage(
+  fileBuffer: Buffer,
+  fileName: string,
+  contentType: string
+): Promise<string> {
+  const resizedImageBuffer = await sharp(fileBuffer)
+    .resize(400, 500) // Adjust dimensions as needed
+    .toBuffer();
+
+  const params = {
+    Bucket: process.env.AWS_S3_BUCKET_NAME as string,
+    Key: `${Date.now()}-${fileName}`,
+    Body: resizedImageBuffer,
+    ContentType: contentType,
+  };
+
+  const command = new PutObjectCommand(params);
+  await s3Client.send(command);
+
+  return params.Key; // Return the S3 object key or URL if you build one
 }
 
-export async function uploadImageMetaData(imageMetaData: ImageMetaData): Promise<PutCommandOutput> {
-  
+export async function uploadImageMetaData(
+  imageMetaData: ImageMetaData
+): Promise<PutCommandOutput> {
   const command = new PutCommand({
     TableName: "ImageMetaData",
     Item: imageMetaData,
@@ -60,16 +72,15 @@ export async function fetchImage(user: string): Promise<string[] | null> {
 
     const { Items } = await dynamoDb.send(command);
 
-    console.log("Amount of items: ", Items?.length ?? 0)
+    console.log("Amount of items: ", Items?.length ?? 0);
 
-    allImages = Items?.flatMap(item => item.uploadedImage ?? []) ?? [];
-
-  }catch (error) {
+    allImages = Items?.flatMap((item) => item.uploadedImage ?? []) ?? [];
+  } catch (error) {
     console.error("Dynamo Db fetching failed:", error);
     throw new Error("Failed to fetch image meta data");
   }
 
-  const imageReceived = []
+  const imageReceived = [];
 
   for (const imageKey of allImages) {
     try {
@@ -88,7 +99,6 @@ export async function fetchImage(user: string): Promise<string[] | null> {
       throw new Error("Failed to fetch image");
     }
   }
-  
 
   return imageReceived.length > 0 ? imageReceived : null;
 }

@@ -31,28 +31,34 @@ def lambda_handler(event, context):
             print(f"Request body length: {len(body_raw)}")  # Debug payload size
             body = json.loads(body_raw)
 
-            image_list = body.get("image", {})
-            brightness = max(0, min(100, body.get("brightness", 50)))
-            contrast = max(0, min(100, body.get("contrast", 50)))
-            saturation = max(0, min(100, body.get("saturation", 50)))
-            rotation = body.get("rotationState", 0)
-            overwrittenFilename = body.get("overwrittenFilename", "")
             uploadId = body.get("uploadId", "")
+            imageName = body.get("imageName", [])            # array of strings
+            imageData = body.get("imageData", [])             # array of base64 strings
 
+            # Extract nested imageParameters
+            imageParameters = body.get("imageParameters", {})
+            brightness = max(0, min(100, imageParameters.get("brightness", 50)))
+            contrast = max(0, min(100, imageParameters.get("contrast", 50)))
+            saturation = max(0, min(100, imageParameters.get("saturation", 50)))
+            rotation = imageParameters.get("rotationState", 0)
+            overwrittenFilename = imageParameters.get("overwrittenFilename", "")
+            resX = imageParameters.get("resX", 1)
+            resY = imageParameters.get("resY", 1)
+
+            print(f"Upload ID: {body}") 
             print(f"Upload ID: {uploadId}") 
-            print(f"image_list: {image_list}") 
+            print(f"imageName: {imageName}") 
+            print(f"imageData: {imageData}") 
+
 
             if not uploadId:
                 return error_response(400, "Missing uploadId")
 
-            if not isinstance(image_list, dict) or not image_list:
-                return error_response(400, f"No images provided. Type: {type(image_list).__name__}")
-
             imageFileNames = []
             uploaded_urls = []
 
-            for filename_key, image_data in image_list.items():
-                raw_data = base64.b64decode(image_data.split(",")[-1])
+            for i in range(len(imageName)):            
+                raw_data = base64.b64decode(imageData[i].split(",")[-1])
                 np_arr = np.frombuffer(raw_data, np.uint8)
                 image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
@@ -83,7 +89,7 @@ def lambda_handler(event, context):
                 byte_buffer = BytesIO(buffer.tobytes())
 
                 # File naming
-                base_name = overwrittenFilename or filename_key
+                base_name = overwrittenFilename or imageName[i]
                 newUuid = uuid.uuid4()
                 file_key = f"{base_name}_{str(newUuid)}.jpg"
                 imageFileNames.append(file_key)
@@ -95,7 +101,7 @@ def lambda_handler(event, context):
                     Body=byte_buffer,
                     ContentType="image/jpeg"
                 )
-                uploaded_urls.append(f"https://{BUCKET_NAME}.s3.amazonaws.com/uploads/{file_key}")
+                uploaded_urls.append(f"https://{BUCKET_NAME}.s3.amazonaws.com/uploads/{imageName[i]}")
         except Exception as e:
             error_msg = f"Unexpected error [{type(e).__name__}]: {str(e)}\n{traceback.format_exc()}"
             print(error_msg)

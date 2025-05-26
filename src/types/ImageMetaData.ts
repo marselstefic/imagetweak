@@ -1,6 +1,9 @@
+import { ImageParameters } from "./ImageParameters";
+
 export interface ImageMetaData {
   uploadId: string;
   user: string | undefined;
-  uploadedImage: string | null;
+  imageName: string[];
   startTime: string;
+  imageParameters: ImageParameters;
 }

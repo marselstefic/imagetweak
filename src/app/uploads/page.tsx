@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
-import { uploadImage, uploadImageMetaData } from "@/lib/actions";
+import { uploadImageMetaData } from "@/lib/actions";
 import { ImageMetaData } from "@/types/ImageMetaData";
 import { ImageParameters } from "@/types/ImageParameters";
 import { SignedIn, SignedOut, useUser } from "@clerk/nextjs";
@@ -17,6 +17,16 @@ import { UserResource } from "@clerk/types";
 import { Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
+import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 export default function Home() {
   const { isSignedIn, user } = useUser();
@@ -24,7 +34,7 @@ export default function Home() {
     UserResource | undefined | null
   >();
 
-  const [imageFiles, setImageFiles] = useState<File[]>([]); 
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [selectedImage, setSelectedImage] = useState("");
   const [imageUploaded, setImageUploaded] = useState(false);
   const [overwriteToggle, setOverwriteToggle] = useState(false);
@@ -33,10 +43,11 @@ export default function Home() {
   const [brightness, setBrightness] = useState([50]);
   const [contrast, setContrast] = useState([50]);
   const [saturation, setSaturation] = useState([50]);
+  const [opacity, setOpacity] = useState([50]);
+
+  const [progress, setProgress] = useState(0);
 
   const { toast } = useToast();
-
-  let uploadSuccessful = false;
 
   useEffect(() => {
     if (isSignedIn) {
@@ -46,9 +57,17 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-  
+
+    setProgress(1);
+
+    if (!activeUser?.id) {
+      toast({ variant: "destructive", title: "User not authenticated" });
+      return;
+    }
+
     const uploadId = uuidv4();
-  
+    const imageNames = imageFiles.map((file) => uuidv4() + "_" + file.name);
+
     const imageParameters: ImageParameters = {
       overwrittenFilename,
       resX: 2,
@@ -58,72 +77,98 @@ export default function Home() {
       contrast: contrast[0],
       saturation: saturation[0],
     };
-  
+
     const imageMetaData: ImageMetaData = {
-      uploadId: uploadId,
-      user: activeUser?.id,
-      imageName: imageFiles.map((file) => file.name), // array of filenames
+      uploadId,
+      user: activeUser.id,
+      imageName: imageNames,
       startTime: getFormattedDate(),
       imageParameters,
     };
-  
+
+    const formData = new FormData();
+    formData.append(
+      "metadata",
+      new Blob([JSON.stringify(imageMetaData)], { type: "application/json" })
+    );
+    imageFiles.forEach((file) => formData.append("files", file));
+
+    try {
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Upload failed");
+      }
+
+      const result = await response.json();
+      imageMetaData.imageName = result.uploadedFiles.map(
+        (file: any) => file.s3Key
+      );
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Upload Failed",
+        description:
+          "An error occurred uploading your images to S3. Please try again.",
+      });
+      return;
+    }
+
+    setProgress(30);
+
     try {
       await uploadImageMetaData(imageMetaData);
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Upload Failed",
-        description: "An error occurred during upload to DynamoDB. Please try again.",
+        title: "Metadata Upload Failed",
+        description:
+          "An error occurred saving metadata to DynamoDb. Please try again.",
       });
       return;
     }
-  
-    // Create FormData with all files
-    const formData = new FormData();
-    formData.append("metadata", new Blob([JSON.stringify(imageMetaData)], { type: "application/json" }));
-    imageFiles.forEach((file) => formData.append("files", file));
-  
+
+    setProgress(60);
+
     try {
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      
+      const response = await fetch(
+        "https://9v6q30w9i6.execute-api.eu-central-1.amazonaws.com/ImageProcessing",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(imageMetaData),
+        }
+      );
+
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Upload failed');
+        throw new Error(errorData.error || "Lambda processing failed");
       }
-      
-      const result = await response.json();
-      console.log("Backend upload result:", result);
+
       toast({
-        title: "Upload Successful",
-        description: "Your image was uploaded to S3 and metadata saved to DynamoDB.",
+        title: "Upload Complete",
+        description: "Image uploaded, metadata saved, and processing started.",
         duration: 5000,
       });
+      setProgress(100);
     } catch (error) {
       toast({
         variant: "destructive",
-        title: "Upload Failed",
-        description: "An error occurred uploading your images. Please try again.",
+        title: "Processing Failed",
+        description: "Image upload succeeded, but processing failed.",
       });
-      return;
     }
-  
-    // Reset state or do whatever you want next
   };
 
   const getFormattedDate = () => {
     const now = new Date();
-    const [d, m, y, h, min, s] = [
-      now.getDate(),
-      now.getMonth() + 1,
-      now.getFullYear(),
-      now.getHours(),
-      now.getMinutes(),
-      now.getSeconds(),
-    ];
-    return `${d}.${m}.${y}_${h}:${min}:${s}`;
+    return `${now.getDate()}.${
+      now.getMonth() + 1
+    }.${now.getFullYear()}_${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
   };
 
   return (
@@ -132,10 +177,9 @@ export default function Home() {
         <SignedOut>SIGN UP TO SEE THIS PAGE!!!!</SignedOut>
 
         <SignedIn>
-          {/* Upload Section */}
           <div className="shadow-md w-full">
-            <div className={`flex flex-row w-full`}>
-              {/* Left: Title + Upload */}
+            <div className={`flex flex-row w-full h-96`}>
+              {/* File upload component */}
               <div
                 className={`${
                   imageUploaded ? "md:w-1/3" : "w-full"
@@ -147,130 +191,130 @@ export default function Home() {
 
                 <FileUpload
                   onImageChange={(filesMap) => {
-                    setImageFiles(Array.from(filesMap.values()));
+                    const files = Array.from(filesMap.values());
+                    setImageFiles(files);
                     setImageUploaded(true);
-                    if (selectedImage === "") {
-                      // For preview, generate a URL for the first file
-                      const firstFile = filesMap.values().next().value;
-                      if (firstFile) {
-                        const url = URL.createObjectURL(firstFile);
-                        setSelectedImage(url);
-                      }
+                    if (selectedImage === "" && files.length > 0) {
+                      setSelectedImage(URL.createObjectURL(files[0]));
                     }
                   }}
                   onImageSelect={setSelectedImage}
                 />
               </div>
 
-              {/* Right: Image Preview */}
+              {/* Image view (right side) */}
               {imageUploaded && (
-                <div className="md:w-2/3 flex items-center justify-center bg-gray-900/85 bg-gradient-to-tr">
-                  <div className="w-full md:w-1/2 h-[60vh] flex items-center justify-center overflow-hidden">
-                    <img
-                      src={selectedImage}
-                      alt="Uploaded Preview"
-                      className="max-w-full max-h-full object-contain"
-                    />
-                  </div>
-                </div>
+                <>
+                  <Card className="md:w-2/3 flex items-center justify-center h-full">
+                    <CardContent className="h-full p-10">
+                      <img
+                        src={selectedImage}
+                        alt="Uploaded Preview"
+                        className="object-cover h-full"
+                      />
+                    </CardContent>
+                  </Card>
+                </>
               )}
             </div>
           </div>
 
-          {/* 2.1 Toolbar + Parameters */}
+          {/* Settings (bottom side) */}
           {imageUploaded && (
             <div className="bg-gray-200 p-6 shadow-md w-full flex-col">
-              <div className="pl-12">
-                {/* Toolbar */}
-                <Tabs defaultValue="colors" className="w-[400px]">
+              <div className="px-6">
+                <Tabs defaultValue="colors" className="w-full">
                   <TabsList className="gap-x-8">
                     <TabsTrigger value="colors">Colors</TabsTrigger>
                     <TabsTrigger value="format">Format</TabsTrigger>
                   </TabsList>
-                  <Separator />
-                  <TabsContent value="colors">
-                    <form
-                      onSubmit={handleSubmit}
-                      className="w-full px-14 md:px-0 flex flex-row gap-x-8"
-                    >
-                      <div className="flex flex-row gap-2">
-                        <Label className="">Overwrite Filename</Label>
-                        <Switch
-                          checked={overwriteToggle}
-                          onCheckedChange={setOverwriteToggle}
-                        />
-                        {overwriteToggle && (
-                          <input
-                            className="border"
-                            value={overwrittenFilename}
-                            onChange={(e) => {
-                              setOverwrittenFilename(e.target.value);
-                            }}
-                          />
-                        )}
+                  <form onSubmit={handleSubmit} className="w-full">
+                    <TabsContent value="colors">
+                      <div className="flex flex-wrap flex-row p-4 my-2">
+                          <div className="flex flex-row gap-x-3">
+                            <div className="flex items-center">
+                              <Label>Overwrite Filename</Label>
+                            </div>
+                            <div className="flex items-center">
+                              <Checkbox
+                                checked={overwriteToggle}
+                                onCheckedChange={setOverwriteToggle}
+                              />
+                            </div>
+                            <div className="flex items-center">
+                            <Separator orientation="vertical" style={{ backgroundColor: "#909090", height:"12px" }} />
+                            </div>
+                            <div className="flex items-center">
+                              {overwriteToggle && (
+                                <input
+                                  className="border"
+                                  value={overwrittenFilename}
+                                  onChange={(e) =>
+                                    setOverwrittenFilename(e.target.value)
+                                  }
+                                />
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex w-full h-full">
+                          {[
+                            {
+                              label: "Brightness",
+                              value: brightness,
+                              setter: setBrightness,
+                            },
+                            {
+                              label: "Contrast",
+                              value: contrast,
+                              setter: setContrast,
+                            },
+                            {
+                              label: "Saturation",
+                              value: saturation,
+                              setter: setSaturation,
+                            },
+                            {
+                              label: "Opacity",
+                              value: opacity,
+                              setter: setOpacity,
+                            },
+                          ].map(({ label, value, setter }) => (
+                            <div
+                              key={label}
+                              className="flex flex-col md:flex-row gap-x-4 pr-5"
+                            >
+                              <div>
+                                <Label>{label}</Label>
+                              </div>
+                              <div className="min-w-36 pt-2.5 md:max-w-56">
+                                <Slider
+                                  defaultValue={[50]}
+                                  max={100}
+                                  step={1}
+                                  value={value}
+                                  onValueChange={setter}
+                                />
+                              </div>
+                              <div>
+                                <Label>{value}</Label>
+                              </div>
+                              <Separator orientation="vertical"	style={{ backgroundColor: "#909090" }}/>
+                            </div>
+                          ))}
+                          </div>
                       </div>
-                      <div className="flex flex-col md:flex-row gap-x-8">
-                        <div>
-                          <Label>Brightness</Label>
-                        </div>
-                        <div className="min-w-36 pt-2.5 md:max-w-56">
-                          <Slider
-                            defaultValue={[50]}
-                            max={100}
-                            step={1}
-                            value={brightness}
-                            onValueChange={setBrightness}
-                          />
-                        </div>
-                        <div>
-                          <Label>{brightness}</Label>
-                        </div>
-                      </div>
-                      <div className="flex flex-col md:flex-row gap-x-8">
-                        <div>
-                          <Label className="">Contrast</Label>
-                        </div>
-                        <div className="min-w-36 pt-2.5 md:max-w-56">
-                          <Slider
-                            defaultValue={[50]}
-                            max={100}
-                            step={1}
-                            value={contrast}
-                            onValueChange={setContrast}
-                          />
-                        </div>
-                        <div>
-                          <Label>{contrast}</Label>
-                        </div>
-                      </div>
-                      <div className="flex flex-col md:flex-row gap-x-8">
-                        <div>
-                          <Label className="">Saturation</Label>
-                        </div>
-                        <div className="min-w-36 pt-2.5 md:max-w-56">
-                          <Slider
-                            defaultValue={[50]}
-                            max={100}
-                            step={1}
-                            value={saturation}
-                            onValueChange={setSaturation}
-                          />
-                        </div>
-                        <div>
-                          <Label>{saturation}</Label>
-                        </div>
-                      </div>
-                      <Button>
-                        Save & Upload <Upload></Upload>
+                      <Button style={{ backgroundImage: "var(--gradient)" }}>
+                        Save & Upload <Upload />
                       </Button>
-                    </form>
-                  </TabsContent>
-                  <TabsContent value="format">TODO</TabsContent>
+                    </TabsContent>
+                    <TabsContent value="format">TODO</TabsContent>
+                  </form>
                 </Tabs>
               </div>
             </div>
-            )}
-          <Toaster/>
+          )}
+          {progress != 0 && <Progress value={progress} />}
+          <Toaster />
         </SignedIn>
       </main>
     </div>

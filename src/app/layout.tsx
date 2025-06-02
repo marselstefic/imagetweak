@@ -1,17 +1,17 @@
-import type { Metadata } from "next";
-import localFont from "next/font/local";
-import "./globals.css";
 import {
+  ClerkLoaded,
   ClerkProvider,
   SignInButton,
   SignUpButton,
   SignedIn,
   SignedOut,
-  UserButton,
-  useUser,
+  UserButton
 } from "@clerk/nextjs";
-import { Upload, Images, LogIn } from "lucide-react";
+import { Images, LogIn, Upload } from "lucide-react";
+import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
+import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -25,18 +25,28 @@ export default function RootLayout({
 }>) {
   return (
     <ClerkProvider>
-      <html lang="en">
+      <html lang="en" className="theme-custom">
         <body className={`antialiased flex flex-col min-w-screen`}>
           {/* Navbar Section */}
-          <div className="h-20 bg-white border-b-2 fixed top-0 left-0 right-0 z-50">
-            <div className="relative top-5 flex flex-row text-sm md:text-lg justify-center gap-x-28 items-center font-poppins">
+          <div className="h-20 bg-white border-b-2 fixed top-0 left-0 right-0 z-50 shadow-md flex flex-row">
+          <ClerkLoaded>
+
+            {/* Left side - Logo */}
+            <div className="flex basis-1/4 pl-48 items-center">
+              <div>
+                <Image src={"/logo2.png"} alt="logo" width={120} height={120} />
+              </div>
+            </div>
+
+            {/* Center - pages */}
+            <div className="relative flex flex-row grow text-sm md:text-lg justify-center gap-x-28 items-center font-poppins">
               {/* Upload & Edit */}
               <div className="w-32 text-center">
                 <Link href="/uploads">
                   <div className="relative">
                     <p>Upload & Edit</p>
-                    <div className="opacity-15 absolute -right-3 -top-5">
-                      <Upload className="w-14 h-14" />
+                    <div className="opacity-10 absolute -right-5 -top-3">
+                      <Upload className="w-11 h-11" />
                     </div>
                   </div>
                 </Link>
@@ -47,14 +57,16 @@ export default function RootLayout({
                 <Link href="/gallery">
                   <div className="relative">
                     <p>Gallery</p>
-                    <div className="opacity-15 absolute -right-0 -top-5">
-                      <Images className="w-14 h-14" />
+                    <div className="opacity-10 absolute right-0 -top-3">
+                      <Images className="w-11 h-11" />
                     </div>
                   </div>
                 </Link>
               </div>
+            </div>
 
-              {/* Account */}
+            {/* Right side- Login/Signup */}
+            <div className="flex basis-1/4 pr-48 justify-end items-center"> 
               <div className="w-32 text-center">
                 <div className="relative">
                   <SignedOut>
@@ -63,32 +75,30 @@ export default function RootLayout({
                       |
                       <SignUpButton />
                     </div>
-                    <div className="opacity-15 absolute -right-0 -top-5">
-                      <LogIn className="w-14 h-14" />
+                    <div className="opacity-10 absolute -right-0 -top-0">
+                      <LogIn className="w-11 h-11" />
                     </div>
                   </SignedOut>
                   <SignedIn>
                     <div className="pt-2">
-                      <UserButton
+                    <UserButton
                         appearance={{
                           elements: {
                             userButtonAvatarBox: {
-                              width: "30px", // Increase width
-                              height: "30px", // Increase height
+                              width: "35px", // Increase width
+                              height: "35px", // Increase height
                             },
                           },
                         }}
                       />
                     </div>
-                    <div className="opacity-15 absolute right-2 -top-3">
-                      <LogIn className="w-14 h-14" />
-                    </div>
+                     
                   </SignedIn>
                 </div>
               </div>
             </div>
+            </ClerkLoaded>
           </div>
-
           {/* Main Content Area */}
           <div className="flex-1 pt-20">{children}</div>
         </body>

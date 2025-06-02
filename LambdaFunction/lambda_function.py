@@ -1,10 +1,10 @@
 import json
 import uuid
-import base64
 import boto3
 import cv2
 import numpy as np
 from io import BytesIO
+from PIL import Image
 from datetime import datetime
 from botocore.exceptions import ClientError
 import traceback
@@ -12,8 +12,15 @@ import traceback
 s3 = boto3.client("s3")
 BUCKET_NAME = "image-tweak-bucket"
 
-dynamodb = boto3.resource('dynamodb', region_name='eu-central-1')
-table = dynamodb.Table('ImageMetaData')
+dynamodb = boto3.resource("dynamodb", region_name="eu-central-1")
+table = dynamodb.Table("ImageMetaData")
+
+SUPPORTED_FORMATS = {
+    "jpeg": "image/jpeg",
+    "jpg": "image/jpeg",
+    "png": "image/png",
+    "webp": "image/webp"
+}
 
 def lambda_handler(event, context):
     http_method = event.get("requestContext", {}).get("http", {}).get("method", "")
@@ -27,43 +34,51 @@ def lambda_handler(event, context):
 
     elif http_method == "POST":
         try:
-            body_raw = event.get("body", "{}")
-            print(f"Request body length: {len(body_raw)}")  # Debug payload size
-            body = json.loads(body_raw)
+            body = json.loads(event.get("body", "{}"))
 
             uploadId = body.get("uploadId", "")
-            imageName = body.get("imageName", [])            # array of strings
-            imageData = body.get("imageData", [])             # array of base64 strings
-
-            # Extract nested imageParameters
+            imageNames = body.get("imageName", [])
             imageParameters = body.get("imageParameters", {})
+            if not uploadId or not imageNames:
+                return error_response(400, "Missing uploadId or imageName")
+
             brightness = max(0, min(100, imageParameters.get("brightness", 50)))
             contrast = max(0, min(100, imageParameters.get("contrast", 50)))
             saturation = max(0, min(100, imageParameters.get("saturation", 50)))
             rotation = imageParameters.get("rotationState", 0)
             overwrittenFilename = imageParameters.get("overwrittenFilename", "")
-            resX = imageParameters.get("resX", 1)
-            resY = imageParameters.get("resY", 1)
-
-            print(f"Upload ID: {body}") 
-            print(f"Upload ID: {uploadId}") 
-            print(f"imageName: {imageName}") 
-            print(f"imageData: {imageData}") 
-
-
-            if not uploadId:
-                return error_response(400, "Missing uploadId")
+            resX = max(0.1, imageParameters.get("resX", 1.0))  # Prevent zero or negative
+            resY = max(0.1, imageParameters.get("resY", 1.0))
+            
+            print(f"UploadId: {uploadId}\n imageNames: {imageNames}\n imageParameters: {imageParameters}")
 
             imageFileNames = []
             uploaded_urls = []
 
-            for i in range(len(imageName)):            
-                raw_data = base64.b64decode(imageData[i].split(",")[-1])
-                np_arr = np.frombuffer(raw_data, np.uint8)
-                image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            for image_key in imageNames:
+                response = s3.get_object(Bucket=BUCKET_NAME, Key=image_key)
+                file_obj = response.get("Body")
 
-                if image is None:
-                    return error_response(400, "Invalid image format")
+                if file_obj is None:
+                    raise ValueError(f"S3 object body is None for key {image_key}")
+
+                file_bytes = file_obj.read()
+                if not file_bytes:
+                    raise ValueError(f"S3 object body is empty for key {image_key}")
+
+                pil_image = Image.open(BytesIO(file_bytes))
+
+                original_format = pil_image.format.lower()
+                if original_format not in SUPPORTED_FORMATS:
+                    return error_response(400, f"Unsupported image format: {original_format}")
+
+                # Resize
+                width, height = pil_image.size
+                new_size = (int(width * resX), int(height * resY))
+                pil_image = pil_image.resize(new_size, Image.Resampling.LANCZOS)
+                
+                # Convert to numpy array for OpenCV
+                image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
 
                 # Rotate
                 (h, w) = image.shape[:2]
@@ -71,86 +86,59 @@ def lambda_handler(event, context):
                 M = cv2.getRotationMatrix2D(center, rotation, 1.0)
                 image = cv2.warpAffine(image, M, (w, h))
 
-                # Brightness and Contrast
+                # Brightness/Contrast
                 alpha = contrast / 50
                 beta = (brightness - 50) * 2
                 image = cv2.convertScaleAbs(image, alpha=alpha, beta=beta)
 
                 # Saturation
                 hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV).astype(np.float32)
-                sat_scale = saturation / 50
-                hsv[:, :, 1] *= sat_scale
-                hsv[:, :, 1] = np.clip(hsv[:, :, 1], 0, 255)
-                hsv[:, :, 2] = np.clip(hsv[:, :, 2], 0, 255)
+                hsv[:, :, 1] *= (saturation / 50)
+                hsv[:, :, 1:] = np.clip(hsv[:, :, 1:], 0, 255)
                 image = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
 
-                # Encode to JPEG
-                _, buffer = cv2.imencode('.jpg', image)
-                byte_buffer = BytesIO(buffer.tobytes())
+                # Convert back to PIL for flexible format support
+                result_pil = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
 
-                # File naming
-                base_name = overwrittenFilename or imageName[i]
-                newUuid = uuid.uuid4()
-                file_key = f"{base_name}_{str(newUuid)}.jpg"
-                imageFileNames.append(file_key)
+                base_name = overwrittenFilename or image_key
+                new_uuid = str(uuid.uuid4())
+                file_ext = original_format if original_format in SUPPORTED_FORMATS else "jpg"
+                new_filename = f"{base_name}_{new_uuid}.{file_ext}"
+                s3_key = f"{base_name}"
+                imageFileNames.append(base_name)
 
-                # Upload to S3
+                # Save to buffer
+                buffer = BytesIO()
+                result_pil.save(buffer, format=file_ext.upper())
+                buffer.seek(0)
+
                 s3.put_object(
                     Bucket=BUCKET_NAME,
-                    Key=f"uploads/{file_key}",
-                    Body=byte_buffer,
-                    ContentType="image/jpeg"
+                    Key=s3_key,
+                    Body=buffer,
+                    ContentType=SUPPORTED_FORMATS[file_ext]
                 )
-                uploaded_urls.append(f"https://{BUCKET_NAME}.s3.amazonaws.com/uploads/{imageName[i]}")
+
+                uploaded_urls.append(f"https://{BUCKET_NAME}.s3.amazonaws.com/{s3_key}")
+                print(f"Processed and uploaded image: {new_filename}")
+                
+            return {
+                    "statusCode": 200,
+                    "body": json.dumps({
+                        "message": "Images processed successfully",
+                        "filenames": imageFileNames,
+                        "urls": uploaded_urls
+                    }),
+                    "headers": cors_headers()
+                }
+
         except Exception as e:
             error_msg = f"Unexpected error [{type(e).__name__}]: {str(e)}\n{traceback.format_exc()}"
             print(error_msg)
             return error_response(500, error_msg)
 
-        try:
-            response = table.update_item(
-                Key={
-                    'uploadId': uploadId,
-                },
-                UpdateExpression="SET uploadedImage = :newVal",
-                ExpressionAttributeValues={
-                    ':newVal': imageFileNames
-                },
-                ReturnValues="UPDATED_NEW"
-            )
-            print("DynamoDB update succeeded:", response)
-            return {
-                "statusCode": 200,
-                "body": json.dumps({"uploaded": uploaded_urls}),
-                "headers": cors_headers()
-            }
-        except ClientError as e:
-            error_msg = "Image metaData upload failed: " + e.response['Error']['Message']
-            print(error_msg)
-            return error_response(500, error_msg)
-
     elif http_method == "DELETE":
-        body = json.loads(event.get("body", "{}"))
-        image_list = body.get("image", {})
-        uploadId = body.get("uploadId", "")
-
-        try:
-            response = table.delete_item(
-                Key={
-                    'uploadId': uploadId,
-                },
-            )
-            print("Delete response:", response)
-            return {
-                "statusCode": 200,
-                "body": json.dumps({
-                    "message": "File deleted successfully.",
-                }),
-            }
-        except ClientError as e:
-            error_msg = "Delete failed: " + e.response['Error']['Message']
-            print(error_msg)
-            return error_response(500, error_msg)
+        ...
 
     else:
         return error_response(405, "Method not allowed. Only POST supported.")

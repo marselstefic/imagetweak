@@ -31,7 +31,7 @@ export async function uploadImage(
 
   const params = {
     Bucket: process.env.AWS_S3_BUCKET_NAME as string,
-    Key: `${Date.now()}-${fileName}`,
+    Key: fileName,
     Body: resizedImageBuffer,
     ContentType: contentType,
   };
@@ -54,12 +54,14 @@ export async function uploadImageMetaData(
   return response;
 }
 
-export async function fetchImage(user: string): Promise<string[] | null> {
+export async function fetchImage(
+  user: string
+): Promise<Map<string, string> | null> {
   let allImages: string[];
   try {
     const command = new QueryCommand({
       TableName: "ImageMetaData",
-      IndexName: "user-index", // <-- must match the GSI name
+      IndexName: "user-index",
       KeyConditionExpression: "#usr = :userVal",
       ExpressionAttributeNames: {
         "#usr": "user",
@@ -67,20 +69,37 @@ export async function fetchImage(user: string): Promise<string[] | null> {
       ExpressionAttributeValues: {
         ":userVal": user,
       },
-      ProjectionExpression: "uploadedImage",
+      ProjectionExpression: "imageName, startTime",
     });
 
     const { Items } = await dynamoDb.send(command);
 
     console.log("Amount of items: ", Items?.length ?? 0);
 
-    allImages = Items?.flatMap((item) => item.uploadedImage ?? []) ?? [];
+    const items = Items ?? [];
+
+    //sorting by startTime (too lazy so I sort it in client)
+    items.sort((a, b) => {
+      const parseStartTime = (str: string) => {
+        const [datePart, timePart] = str.split("_");
+        const [day, month, year] = datePart.split(".").map(Number);
+        const [hours, minutes, seconds] = timePart.split(":").map(Number);
+        return new Date(year, month - 1, day, hours, minutes, seconds);
+      };
+
+      return (
+        parseStartTime(b.startTime).getTime() -
+        parseStartTime(a.startTime).getTime()
+      );
+    });
+
+    allImages = items?.flatMap((item) => item.imageName ?? []) ?? [];
   } catch (error) {
     console.error("Dynamo Db fetching failed:", error);
     throw new Error("Failed to fetch image meta data");
   }
 
-  const imageReceived = [];
+  const imageReceived: Map<string, string> = new Map();
 
   for (const imageKey of allImages) {
     try {
@@ -89,25 +108,33 @@ export async function fetchImage(user: string): Promise<string[] | null> {
         Key: imageKey,
       };
 
+      console.log("📦 Attempting S3 fetch for key:", imageKey);
+
       const command = new GetObjectCommand(params);
       const result = await s3Client.send(command);
 
-      const base64String = await streamToString(result.Body);
-      imageReceived.push(base64String);
+      console.log("base64Strings:" + result.Body);
+      const base64String = await streamToBase64(result.Body);
+      imageReceived.set(imageKey, base64String);
     } catch (error) {
       console.error("S3 Fetch Error:", error);
       throw new Error("Failed to fetch image");
     }
   }
 
-  return imageReceived.length > 0 ? imageReceived : null;
+  return imageReceived.size > 0 ? imageReceived : null;
 }
 
-export async function streamToString(stream: any): Promise<string> {
+export async function streamToBase64(stream: any): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Uint8Array[] = [];
-    stream.on("data", (chunk: Uint8Array) => chunks.push(chunk));
-    stream.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+    stream.on("data", (chunk: Uint8Array<ArrayBufferLike>) =>
+      chunks.push(chunk)
+    );
+    stream.on("end", () => {
+      const buffer = Buffer.concat(chunks);
+      resolve(buffer.toString("base64")); // ✅ BASE64 conversion
+    });
     stream.on("error", reject);
   });
 }

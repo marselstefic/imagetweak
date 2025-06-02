@@ -3,7 +3,7 @@ FROM public.ecr.aws/lambda/python:3.8
 
 # Install OpenCV and other dependencies (gzip, tar)
 RUN yum install -y gzip tar && \
-    pip install opencv-python-headless numpy boto3
+    pip install opencv-python-headless numpy boto3 pillow
 
 # Copy the lambda function code into the container
 COPY lambda_function.py ${LAMBDA_TASK_ROOT}

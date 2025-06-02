@@ -5,13 +5,21 @@ import {
   SignUpButton,
   SignedIn,
   SignedOut,
-  UserButton
+  UserButton,
 } from "@clerk/nextjs";
-import { Images, LogIn, Upload } from "lucide-react";
+import { Images, LogIn, MenuIcon, Upload } from "lucide-react";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import "./globals.css";
+import "@fontsource/poppins/400.css";
+import "@fontsource/poppins/700.css";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -25,82 +33,79 @@ export default function RootLayout({
 }>) {
   return (
     <ClerkProvider>
-      <html lang="en" className="theme-custom">
-        <body className={`antialiased flex flex-col min-w-screen`}>
-          {/* Navbar Section */}
-          <div className="h-20 bg-white border-b-2 fixed top-0 left-0 right-0 z-50 shadow-md flex flex-row">
-          <ClerkLoaded>
-
-            {/* Left side - Logo */}
-            <div className="flex basis-1/4 pl-48 items-center">
-              <div>
-                <Image src={"/logo2.png"} alt="logo" width={120} height={120} />
+      <html lang="en">
+        <body className="antialiased flex flex-col min-w-screen">
+          {/* Navbar */}
+          <div className="h-20 bg-white border-b-2 fixed top-0 left-0 right-0 z-50 shadow-md flex items-center justify-between px-4 sm:px-8 md:px-20">
+            <ClerkLoaded>
+              {/* Left - Logo */}
+              <div className="flex items-center">
+                <Image src="/logo2.png" alt="logo" width={100} height={100} />
               </div>
-            </div>
 
-            {/* Center - pages */}
-            <div className="relative flex flex-row grow text-sm md:text-lg justify-center gap-x-28 items-center font-poppins">
-              {/* Upload & Edit */}
-              <div className="w-32 text-center">
+              {/* Center - Nav Links */}
+              <div className="hidden sm:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex-row justify-center items-center gap-x-6 md:gap-x-12 font-poppins text-sm md:text-lg">
                 <Link href="/uploads">
-                  <div className="relative">
+                  <div className="relative text-center">
                     <p>Upload & Edit</p>
-                    <div className="opacity-10 absolute -right-5 -top-3">
-                      <Upload className="w-11 h-11" />
-                    </div>
+                    <Upload className="w-6 h-6 opacity-10 absolute -right-5 -top-3" />
                   </div>
                 </Link>
-              </div>
-
-              {/* Gallery */}
-              <div className="w-32 text-center">
                 <Link href="/gallery">
-                  <div className="relative">
+                  <div className="relative text-center">
                     <p>Gallery</p>
-                    <div className="opacity-10 absolute right-0 -top-3">
-                      <Images className="w-11 h-11" />
-                    </div>
+                    <Images className="w-6 h-6 opacity-10 absolute -right-4 -top-3" />
                   </div>
                 </Link>
               </div>
-            </div>
 
-            {/* Right side- Login/Signup */}
-            <div className="flex basis-1/4 pr-48 justify-end items-center"> 
-              <div className="w-32 text-center">
-                <div className="relative">
-                  <SignedOut>
-                    <div className="flex flex-row gap-1 items-center w-36">
-                      <SignInButton />
-                      |
-                      <SignUpButton />
-                    </div>
-                    <div className="opacity-10 absolute -right-0 -top-0">
-                      <LogIn className="w-11 h-11" />
-                    </div>
-                  </SignedOut>
-                  <SignedIn>
-                    <div className="pt-2">
-                    <UserButton
-                        appearance={{
-                          elements: {
-                            userButtonAvatarBox: {
-                              width: "35px", // Increase width
-                              height: "35px", // Increase height
-                            },
-                          },
-                        }}
-                      />
-                    </div>
-                     
-                  </SignedIn>
-                </div>
+              {/* Mobile Nav (visible only on mobile) */}
+              <div className="flex sm:hidden">
+                <DropdownMenu>
+                  <DropdownMenuTrigger className="p-2">
+                    <MenuIcon className="w-6 h-6" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-40">
+                    <DropdownMenuItem asChild>
+                      <Link href="/uploads">Upload & Edit</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/gallery">Gallery</Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-            </div>
+
+              {/* Right - Auth */}
+              <div className="flex items-center">
+                <SignedOut>
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <SignInButton />
+                    <span className="text-gray-400 hidden sm:inline">|</span>
+                    <SignUpButton />
+                    <LogIn className="w-6 h-6 opacity-10 hidden sm:block" />
+                  </div>
+                </SignedOut>
+                <SignedIn>
+                  <UserButton
+                    appearance={{
+                      elements: {
+                        userButtonAvatarBox: {
+                          width: "35px",
+                          height: "35px",
+                        },
+                      },
+                    }}
+                  />
+                </SignedIn>
+              </div>
             </ClerkLoaded>
           </div>
-          {/* Main Content Area */}
-          <div className="flex-1 pt-20">{children}</div>
+
+          {/* Main Content */}
+          <div className="flex-1 pt-20 bg-[url('/background.svg')] bg-no-repeat bg-cover bg-center min-h-screen">
+            {children}
+          </div>
         </body>
       </html>
     </ClerkProvider>

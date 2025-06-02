@@ -1,4 +1,4 @@
-export interface ImageParameters {
+export type ImageParameters = {
     overwrittenFilename: string;
     resX: number;
     resY: number;
@@ -6,5 +6,6 @@ export interface ImageParameters {
     brightness: number;
     contrast: number;
     saturation: number;
-};
-  
+    opacity: number;
+    outputFormat: string;
+  };

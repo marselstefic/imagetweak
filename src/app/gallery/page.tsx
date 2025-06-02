@@ -3,44 +3,85 @@
 import { useEffect, useState } from "react";
 import { SignedIn, SignedOut, useUser } from "@clerk/nextjs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fetchImage } from "@/lib/actions";
-import { RefreshCw } from 'lucide-react';
-import { X } from "lucide-react"; // icon for close button
+import { fetchImage, deleteImageData } from "@/lib/actions";
+import { RefreshCw, X, Trash2, Download } from "lucide-react";
 
 export default function Home() {
   const { user, isLoaded } = useUser();
   const [images, setImages] = useState<string[] | null>(null);
-  const [imageNames, setImageNames] = useState<string[] | null>(null);
+  const [editedNames, setEditedNames] = useState<string[] | null>(null);
+  const [originalToEdited, setOriginalToEdited] = useState<Map<string, string> | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState<string | null>(null);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [spinning, setSpinning] = useState(false);
 
+  const getExtension = (fileName: string): string => {
+    const parts = fileName.split(".");
+    return parts.length > 1 ? parts.pop()!.toLowerCase() : "";
+  };
 
   const loadImages = async () => {
     try {
       if (!isLoaded || !user?.id) return;
       const result = await fetchImage(user.id);
-      console.log(result)
-      const originalNames = result ? Array.from(result.keys()) : [];
-      const editedNames = originalNames.map((name) => name.split("_")[1]);  
-      setImageNames(editedNames);
-      setImages(result ? Array.from(result?.values()) : null);
+      if (!result) {
+        setImages(null);
+        setEditedNames(null);
+        setOriginalToEdited(null);
+        return;
+      }
+
+      const originalNames = Array.from(result.keys());
+      const edited = originalNames.map(name => name.split("_")[1]); // "user_edited.png" => "edited.png"
+      const mapping = new Map<string, string>(
+        edited.map((editedName, i) => [editedName, originalNames[i]])
+      );
+
+      setImages(Array.from(result.values()));
+      setEditedNames(edited);
+      setOriginalToEdited(mapping);
     } catch (err) {
       console.error("Image fetch error:", err);
       setImages(null);
+      setEditedNames(null);
+      setOriginalToEdited(null);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {    
+  useEffect(() => {
     loadImages();
   }, [isLoaded, user?.id]);
 
   const refresh = async () => {
     setSpinning(true);
-    await loadImages()
-    setSpinning(false)
+    await loadImages();
+    setSpinning(false);
+  };
+
+  const handleDelete = async () => {
+    if (
+      activeIndex === null ||
+      !editedNames ||
+      !originalToEdited ||
+      !editedNames[activeIndex]
+    )
+      return;
+
+    const editedName = editedNames[activeIndex];
+    const originalName = originalToEdited.get(editedName);
+    if (!originalName) return;
+
+    try {
+      await deleteImageData(originalName);
+      await loadImages();
+      setActiveImage(null);
+      setActiveIndex(null);
+    } catch (error) {
+      console.error("Failed to delete image:", error);
+    }
   };
 
   const skeletonCount = 12;
@@ -58,10 +99,13 @@ export default function Home() {
           <div className="w-10 h-10">
             <button onClick={refresh}>
               <div className="w-10 h-10 top-10 rounded-full bg-gray-300 flex items-center justify-center text-center">
-                <RefreshCw className={`text-white ${spinning ? 'animate-spin' : ''}`} />
+                <RefreshCw
+                  className={`text-white ${spinning ? "animate-spin" : ""}`}
+                />
               </div>
             </button>
           </div>
+
           <div className="absolute top-20 grid grid-cols-3 md:grid-cols-5 gap-5 md:gap-10 pt-10">
             {loading ? (
               Array.from({ length: skeletonCount }).map((_, i) => (
@@ -70,18 +114,24 @@ export default function Home() {
                   className="h-20 w-20 md:h-32 md:w-32 bg-gray-100 rounded-md"
                 />
               ))
-            ) : images && images.length > 0 && imageNames ? (
+            ) : images && images.length > 0 && editedNames ? (
               images.map((img, i) => (
-                  <div className="flex flex-col">
+                <div key={i} className="flex flex-col">
                   <img
-                  key={i}
-                  src={`data:image/jpeg;base64,${img}`}
-                  alt={`Uploaded image ${i + 1}`}
-                  title={imageNames[i]}
-                  onClick={() => setActiveImage(img)}
-                  className="h-20 w-20 md:h-32 md:w-32 object-cover rounded-md cursor-pointer transition-transform hover:scale-105"
+                    src={`data:image/${getExtension(editedNames[i])};base64,${img}`}
+                    alt={`Uploaded image ${i + 1}`}
+                    title={editedNames[i]}
+                    onClick={() => {
+                      setActiveImage(img);
+                      setActiveIndex(i);
+                    }}
+                    className="h-20 w-20 md:h-32 md:w-32 object-cover rounded-md cursor-pointer transition-transform hover:scale-105"
                   />
-                <label title={imageNames[i]}>{imageNames[i].length > 14 ? imageNames[i].substring(0, 16) + "..." : imageNames[i]}</label>
+                  <label title={editedNames[i]}>
+                    {editedNames[i].length > 14
+                      ? editedNames[i].substring(0, 16) + "..."
+                      : editedNames[i]}
+                  </label>
                 </div>
               ))
             ) : (
@@ -93,15 +143,47 @@ export default function Home() {
         </SignedIn>
       </main>
 
-      {activeImage && (
+      {/* Enlarged Modal */}
+      {activeImage && editedNames && activeIndex !== null && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-80 flex items-center justify-center">
           <div className="relative">
-            <button
-              onClick={() => setActiveImage(null)}
-              className="absolute top-2 right-2 text-white hover:text-red-400 transition"
-            >
-              <X size={28} />
-            </button>
+            {/* Buttons */}
+            <div className="absolute top-2 right-2 flex gap-4 z-10">
+              {/* DELETE */}
+              <button
+                onClick={handleDelete}
+                className="text-white hover:text-red-500 transition"
+                title="Delete Image"
+              >
+                <Trash2 />
+              </button>
+
+              {/* Download */}
+              <a
+                href={`data:image/${getExtension(
+                  editedNames[activeIndex]
+                )};base64,${activeImage}`}
+                download={editedNames[activeIndex]}
+                className="text-white hover:text-blue-400 transition"
+                title="Download Image"
+              >
+                <Download />
+              </a>
+
+              {/* Close */}
+              <button
+                onClick={() => {
+                  setActiveImage(null);
+                  setActiveIndex(null);
+                }}
+                className="text-white hover:text-gray-300 transition"
+                title="Close"
+              >
+                <X size={28} />
+              </button>
+            </div>
+
+            {/* Enlarged Image */}
             <img
               src={`data:image/jpeg;base64,${activeImage}`}
               alt="Enlarged preview"

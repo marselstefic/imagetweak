@@ -2,10 +2,19 @@
 
 import FileUpload from "@/components/FileUpload";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
@@ -17,16 +26,7 @@ import { UserResource } from "@clerk/types";
 import { Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { Progress } from "@/components/ui/progress";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Link2, Link2Off } from "lucide-react";
 
 export default function Home() {
   const { isSignedIn, user } = useUser();
@@ -43,7 +43,12 @@ export default function Home() {
   const [brightness, setBrightness] = useState([50]);
   const [contrast, setContrast] = useState([50]);
   const [saturation, setSaturation] = useState([50]);
-  const [opacity, setOpacity] = useState([50]);
+  const [opacity, setOpacity] = useState([100]);
+  const [resX, setResX] = useState("512");
+  const [resY, setResY] = useState("512");
+  const [rotation, setRotation] = useState("0");
+  const [outputFormat, setOutputFormat] = useState("png");
+  const [aspectLocked, setAspectLocked] = useState(true);
 
   const [progress, setProgress] = useState(0);
 
@@ -70,12 +75,14 @@ export default function Home() {
 
     const imageParameters: ImageParameters = {
       overwrittenFilename,
-      resX: 2,
-      resY: 2,
-      rotationState: 2,
+      resX: parseInt(resX),
+      resY: parseInt(resY),
+      rotationState: parseInt(rotation),
       brightness: brightness[0],
       contrast: contrast[0],
       saturation: saturation[0],
+      opacity: opacity[0],
+      outputFormat,
     };
 
     const imageMetaData: ImageMetaData = {
@@ -134,6 +141,8 @@ export default function Home() {
 
     setProgress(60);
 
+    console.log(imageParameters)
+
     try {
       const response = await fetch(
         "https://9v6q30w9i6.execute-api.eu-central-1.amazonaws.com/ImageProcessing",
@@ -171,6 +180,36 @@ export default function Home() {
     }.${now.getFullYear()}_${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
   };
 
+  const handleResXChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newX = e.target.value;
+    setResX(newX);
+
+    const parsedNewX = parseFloat(newX);
+    const parsedResX = parseFloat(resX);
+    const parsedResY = parseFloat(resY);
+
+    if (aspectLocked && parsedNewX > 0 && parsedResX > 0 && parsedResY > 0) {
+      const ratio = parsedNewX / parsedResX;
+      const newY = Math.round(parsedResY * ratio);
+      setResY(newY.toString());
+    }
+  };
+
+  const handleResYChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newY = e.target.value;
+    setResY(newY);
+
+    const parsedNewY = parseFloat(newY);
+    const parsedResX = parseFloat(resX);
+    const parsedResY = parseFloat(resY);
+
+    if (aspectLocked && parsedNewY > 0 && parsedResX > 0 && parsedResY > 0) {
+      const ratio = parsedNewY / parsedResY;
+      const newX = Math.round(parsedResX * ratio);
+      setResX(newX.toString());
+    }
+  };
+
   return (
     <div className="flex justify-center min-h-screen w-full">
       <main className="flex flex-col px-48 pt-8 w-full items-center">
@@ -183,7 +222,7 @@ export default function Home() {
               <div
                 className={`${
                   imageUploaded ? "md:w-1/3" : "w-full"
-                } flex flex-col items-center p-6 bg-gray-100`}
+                } flex flex-col items-center p-6 bg-white border-4 border-dashed border-blue-100`}
               >
                 <div className="text-2xl text-center w-full p-6">
                   Upload Library
@@ -194,8 +233,17 @@ export default function Home() {
                     const files = Array.from(filesMap.values());
                     setImageFiles(files);
                     setImageUploaded(true);
-                    if (selectedImage === "" && files.length > 0) {
-                      setSelectedImage(URL.createObjectURL(files[0]));
+
+                    if (files.length > 0) {
+                      const objectUrl = URL.createObjectURL(files[0]);
+                      setSelectedImage(objectUrl);
+
+                      const img = new Image();
+                      img.onload = () => {
+                        setResX(img.width.toString());
+                        setResY(img.height.toString());
+                      };
+                      img.src = objectUrl; // ✅ this is the correct and available image URL
                     }
                   }}
                   onImageSelect={setSelectedImage}
@@ -205,15 +253,15 @@ export default function Home() {
               {/* Image view (right side) */}
               {imageUploaded && (
                 <>
-                  <Card className="md:w-2/3 flex items-center justify-center h-full">
-                    <CardContent className="h-full p-10">
+                  <div className="md:w-2/3 flex items-center justify-center h-full bg-white border border-blue-100">
+                    <div className="h-full p-10">
                       <img
                         src={selectedImage}
                         alt="Uploaded Preview"
                         className="object-cover h-full"
                       />
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </div>
                 </>
               )}
             </div>
@@ -221,42 +269,49 @@ export default function Home() {
 
           {/* Settings (bottom side) */}
           {imageUploaded && (
-            <div className="bg-gray-200 p-6 shadow-md w-full flex-col">
-              <div className="px-6">
+            <div className="bg-blue-50 p-6 shadow-md w-full flex-col">
+              <div className="px-6 w-full">
                 <Tabs defaultValue="colors" className="w-full">
                   <TabsList className="gap-x-8">
                     <TabsTrigger value="colors">Colors</TabsTrigger>
+                    <TabsTrigger value="scaling">Scaling</TabsTrigger>
                     <TabsTrigger value="format">Format</TabsTrigger>
                   </TabsList>
                   <form onSubmit={handleSubmit} className="w-full">
                     <TabsContent value="colors">
                       <div className="flex flex-wrap flex-row p-4 my-2">
-                          <div className="flex flex-row gap-x-3">
-                            <div className="flex items-center">
-                              <Label>Overwrite Filename</Label>
-                            </div>
-                            <div className="flex items-center">
-                              <Checkbox
-                                checked={overwriteToggle}
-                                onCheckedChange={setOverwriteToggle}
-                              />
-                            </div>
-                            <div className="flex items-center">
-                            <Separator orientation="vertical" style={{ backgroundColor: "#909090", height:"12px" }} />
-                            </div>
-                            <div className="flex items-center">
-                              {overwriteToggle && (
-                                <input
-                                  className="border"
-                                  value={overwrittenFilename}
-                                  onChange={(e) =>
-                                    setOverwrittenFilename(e.target.value)
-                                  }
-                                />
-                              )}
-                            </div>
+                        <div className="flex flex-row gap-x-3">
+                          <div className="flex items-center">
+                            <Label>Overwrite Filename</Label>
                           </div>
-                          <div className="flex w-full h-full">
+                          <div className="flex items-center">
+                            <Checkbox
+                              checked={overwriteToggle}
+                              onCheckedChange={setOverwriteToggle}
+                            />
+                          </div>
+                          <div className="flex items-center">
+                            <Separator
+                              orientation="vertical"
+                              style={{
+                                backgroundColor: "#909090",
+                                height: "12px",
+                              }}
+                            />
+                          </div>
+                          <div className="flex items-center">
+                            {overwriteToggle && (
+                              <input
+                                className="border"
+                                value={overwrittenFilename}
+                                onChange={(e) =>
+                                  setOverwrittenFilename(e.target.value)
+                                }
+                              />
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap w-full h-full">
                           {[
                             {
                               label: "Brightness",
@@ -298,16 +353,69 @@ export default function Home() {
                               <div>
                                 <Label>{value}</Label>
                               </div>
-                              <Separator orientation="vertical"	style={{ backgroundColor: "#909090" }}/>
+                              <Separator
+                                orientation="vertical"
+                                style={{ backgroundColor: "#909090" }}
+                              />
                             </div>
                           ))}
-                          </div>
+                        </div>
                       </div>
-                      <Button style={{ backgroundImage: "var(--gradient)" }}>
-                        Save & Upload <Upload />
-                      </Button>
                     </TabsContent>
-                    <TabsContent value="format">TODO</TabsContent>
+                    <TabsContent value="scaling">
+                      <div className="flex flex-wrap items-center gap-4 p-4">
+                        <div className="flex flex-col">
+                          <Label>Resolution (Width)</Label>
+                          <Input value={resX} onChange={handleResXChange} />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="self-end mb-1"
+                          onClick={() => setAspectLocked(!aspectLocked)}
+                        >
+                          {aspectLocked ? (
+                            <Link2 className="w-5 h-5" />
+                          ) : (
+                            <Link2Off className="w-5 h-5" />
+                          )}
+                        </Button>
+                        <div className="flex flex-col">
+                          <Label>Resolution (Height)</Label>
+                          <Input value={resY} onChange={handleResYChange} />
+                        </div>
+                        <div className="flex flex-col">
+                          <Label>Rotation (°)</Label>
+                          <Input
+                            value={rotation}
+                            onChange={(e) => setRotation(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="format">
+                      <div className="flex flex-col p-4 gap-4">
+                        <Label>Output Format</Label>
+                        <Select
+                          value={outputFormat}
+                          onValueChange={setOutputFormat}
+                        >
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Select format" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="png">PNG</SelectItem>
+                            <SelectItem value="jpg">JPG</SelectItem>
+                            <SelectItem value="jpeg">JPEG</SelectItem>
+                            <SelectItem value="webp">WEBP</SelectItem>
+                            <SelectItem value="tiff">TIFF</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </TabsContent>
+                    <Button style={{ backgroundImage: "var(--gradient)" }}>
+                      Save & Upload <Upload />
+                    </Button>
                   </form>
                 </Tabs>
               </div>

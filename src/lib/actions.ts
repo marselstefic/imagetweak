@@ -1,22 +1,16 @@
 "use server";
 
 import { ImageMetaData } from "@/types/ImageMetaData";
-import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import {
+  DeleteCommand,
   PutCommand,
   PutCommandOutput,
   QueryCommand,
+  ScanCommand,
+  UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { dynamoDb, s3Client } from "./dynamodb";
-
-type UploadImageParams = {
-  imageMetaData: ImageMetaData;
-  files: Array<{
-    buffer: Buffer | Uint8Array;
-    name: string;
-    contentType: string;
-  }>;
-};
 
 import sharp from "sharp";
 
@@ -123,6 +117,82 @@ export async function fetchImage(
   }
 
   return imageReceived.size > 0 ? imageReceived : null;
+}
+
+export async function deleteImageData(imageNameToDelete: string): Promise<void> {
+  const bucketName = process.env.AWS_S3_BUCKET_NAME as string;
+
+  console.log("TO DELETE: " + imageNameToDelete)
+
+  // 1. Delete from S3
+  try {
+    await s3Client.send(
+      new DeleteObjectCommand({
+        Bucket: bucketName,
+        Key: imageNameToDelete,
+      })
+    );
+    console.log(`Deleted image from S3: ${imageNameToDelete}`);
+  } catch (error) {
+    console.error(`Error deleting image from S3: ${imageNameToDelete}`, error);
+    throw new Error("Failed to delete image from S3.");
+  }
+
+  // 2. Find DynamoDB entry that contains this image name
+  const scanCommand = new ScanCommand({
+    TableName: "ImageMetaData",
+    FilterExpression: "contains(imageName, :img)",
+    ExpressionAttributeValues: {
+      ":img": imageNameToDelete,
+    },
+  });
+
+  const scanResult = await dynamoDb.send(scanCommand);
+
+  if (!scanResult.Items || scanResult.Items.length === 0) {
+    console.warn(`No DynamoDB entry found for image: ${imageNameToDelete}`);
+    return;
+  }
+
+  // Assume only one match (you can extend this for multiple matches)
+  const item = scanResult.Items[0];
+  const { uploadId, imageName } = item;
+
+  if (imageName.length === 1) {
+    // 3a. Only one image in entry — delete the full item
+    try {
+      await dynamoDb.send(
+        new DeleteCommand({
+          TableName: "ImageMetaData",
+          Key: { uploadId },
+        })
+      );
+      console.log(`Deleted entire DynamoDB entry with uploadId: ${uploadId}`);
+    } catch (err) {
+      console.error(`Failed to delete DynamoDB entry with uploadId: ${uploadId}`, err);
+      throw new Error("Failed to delete DynamoDB entry.");
+    }
+  } else {
+    // 3b. Multiple images — remove just the imageName and update
+    const updatedImageNames = imageName.filter((n: string) => n !== imageNameToDelete);
+
+    try {
+      await dynamoDb.send(
+        new UpdateCommand({
+          TableName: "ImageMetaData",
+          Key: { uploadId },
+          UpdateExpression: "SET imageName = :newList",
+          ExpressionAttributeValues: {
+            ":newList": updatedImageNames,
+          },
+        })
+      );
+      console.log(`Removed ${imageNameToDelete} from imageName array in DynamoDB`);
+    } catch (err) {
+      console.error(`Failed to update DynamoDB entry for uploadId: ${uploadId}`, err);
+      throw new Error("Failed to update DynamoDB imageName array.");
+    }
+  }
 }
 
 export async function streamToBase64(stream: any): Promise<string> {

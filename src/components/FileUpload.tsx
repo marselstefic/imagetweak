@@ -4,8 +4,8 @@ import { Upload, Image } from "antd";
 import type { UploadFile, UploadProps } from "antd";
 
 type FileUploadProps = {
-  onImageChange: (images: Map<string, File>) => void; // Changed to File instead of base64 string
-  onImageSelect: (image: string) => void;
+  onImageChange: (files: File[]) => void;
+  onImageSelect: (image: [string, number] | null) => void;
 };
 
 const FileUpload: React.FC<FileUploadProps> = ({ onImageChange, onImageSelect }) => {
@@ -13,7 +13,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onImageChange, onImageSelect })
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState("");
 
-  //im keeping getBase64 only for preview generation
+  // Helper to convert a File to base64 for preview
   const getBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -23,42 +23,44 @@ const FileUpload: React.FC<FileUploadProps> = ({ onImageChange, onImageSelect })
     });
 
   const handlePreview = async (file: UploadFile) => {
-    if (file.originFileObj) {
-      try {
-        const base64 = await getBase64(file.originFileObj);
-        setPreviewImage(base64);
-        setPreviewOpen(true);
-        onImageSelect(base64);  // still sends base64 for preview use
-      } catch (error) {
-        console.error('Error converting file to base64:', error);
-      }
+    if (!file.preview && file.originFileObj) {
+      file.preview = await getBase64(file.originFileObj);
+    }
+    if (file.preview) {
+      const index = fileList.findIndex((f) => f.uid === file.uid);
+      onImageSelect([file.preview as string, index]);
     } else {
-      console.error('File origin object is not available');
+      onImageSelect(null);
     }
   };
 
-  const handleChange: UploadProps["onChange"] = async ({ fileList: newList }) => {
-    setFileList(newList);
+  const handleChange: UploadProps["onChange"] = async (info) => {
+    const newFileList = await Promise.all(
+      info.fileList.map(async (file) => {
+        if (!file.preview && file.originFileObj) {
+          file.preview = await getBase64(file.originFileObj);
+        }
+        return file;
+      })
+    );
 
-    const fileMap: Map<string, File> = new Map();
+    setFileList(newFileList);
 
-    for (const file of newList) {
-      if (file.originFileObj) {
-        fileMap.set(file.name, file.originFileObj);
-      }
-    }
+    const files: File[] = newFileList
+      .map((f) => f.originFileObj)
+      .filter((f): f is File => f instanceof File);
 
-    onImageChange(fileMap);
+    onImageChange(files);
 
-    // Generate preview for first file in the list
-    if (newList.length > 0 && newList[0].originFileObj) {
-      const base64 = await getBase64(newList[0].originFileObj);
-      newList[0].preview = base64;
+    // Auto-select the last added image
+    if (newFileList.length > 0) {
+      const last = newFileList[newFileList.length - 1];
+      onImageSelect([last.preview as string, newFileList.length - 1]);
     }
   };
 
   const uploadButton = (
-    <button style={{ border: 0, background: 'none' }} type="button">
+    <button style={{ border: 0, background: "none" }} type="button">
       <PlusOutlined />
       <div>Upload</div>
     </button>
@@ -75,13 +77,14 @@ const FileUpload: React.FC<FileUploadProps> = ({ onImageChange, onImageSelect })
       >
         {fileList.length >= 8 ? null : uploadButton}
       </Upload>
+
       {previewImage && (
         <Image
-          wrapperStyle={{ display: 'none' }}
+          wrapperStyle={{ display: "none" }}
           preview={{
             visible: previewOpen,
             onVisibleChange: (visible) => setPreviewOpen(visible),
-            afterOpenChange: (visible) => !visible && setPreviewImage(''),
+            afterOpenChange: (visible) => !visible && setPreviewImage(""),
           }}
           src={previewImage}
           className="custom-upload"

@@ -35,30 +35,67 @@ export default function Home() {
   >();
 
   const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [selectedImage, setSelectedImage] = useState("");
+  const [selectedImage, setSelectedImage] = useState<[string, number] | null>(
+    null
+  );
   const [imageUploaded, setImageUploaded] = useState(false);
-  const [overwriteToggle, setOverwriteToggle] = useState(false);
-  const [overwrittenFilename, setOverwrittenFilename] = useState("");
+  const [overwriteToggle, setOverwriteToggle] = useState<boolean[]>([]);
+  const [overwrittenFilename, setOverwrittenFilename] = useState<string[]>([]);
 
-  const [brightness, setBrightness] = useState([50]);
-  const [contrast, setContrast] = useState([50]);
-  const [saturation, setSaturation] = useState([50]);
-  const [opacity, setOpacity] = useState([100]);
-  const [resX, setResX] = useState("512");
-  const [resY, setResY] = useState("512");
-  const [rotation, setRotation] = useState("0");
-  const [outputFormat, setOutputFormat] = useState("png");
-  const [aspectLocked, setAspectLocked] = useState(true);
+  const [brightness, setBrightness] = useState<number[][]>([]);
+  const [contrast, setContrast] = useState<number[][]>([]);
+  const [saturation, setSaturation] = useState<number[][]>([]);
+  const [opacity, setOpacity] = useState<number[][]>([]);
 
+  const [resX, setResX] = useState<string[]>([]);
+  const [resY, setResY] = useState<string[]>([]);
+  const [rotation, setRotation] = useState<string[]>([]);
+  const [outputFormat, setOutputFormat] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
 
   const { toast } = useToast();
+
+  const index = selectedImage?.[1] ?? 0;
 
   useEffect(() => {
     if (isSignedIn) {
       setActiveUser(user);
     }
   }, [isSignedIn, user]);
+
+  const initializeDefaults = (count: number) => {
+    setBrightness((prev) => mergeDefaults(prev, count, [50]));
+    setContrast((prev) => mergeDefaults(prev, count, [50]));
+    setSaturation((prev) => mergeDefaults(prev, count, [50]));
+    setOpacity((prev) => mergeDefaults(prev, count, [100]));
+    setResX((prev) => mergeDefaults(prev, count, "512"));
+    setResY((prev) => mergeDefaults(prev, count, "512"));
+    setRotation((prev) => mergeDefaults(prev, count, "0"));
+    setOutputFormat((prev) => mergeDefaults(prev, count, "png"));
+    setOverwriteToggle((prev) => mergeDefaults(prev, count, false));
+    setOverwrittenFilename((prev) => mergeDefaults(prev, count, ""));
+  };
+
+  function mergeDefaults<T>(
+    oldArray: T[],
+    newLength: number,
+    defaultValue: T
+  ): T[] {
+    const newArray = [...oldArray];
+    while (newArray.length < newLength) {
+      newArray.push(defaultValue);
+    }
+    if (newArray.length > newLength) {
+      newArray.length = newLength; // trim if less files now
+    }
+    return newArray;
+  }
+
+  function updateAtIndex<T>(arr: T[], index: number, newValue: T): T[] {
+    const copy = [...arr]; //[[50], [50]]
+    copy[index] = newValue;
+    return copy;
+  }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -75,15 +112,17 @@ export default function Home() {
 
     const imageParameters: ImageParameters = {
       overwrittenFilename,
-      resX: parseInt(resX),
-      resY: parseInt(resY),
-      rotationState: parseInt(rotation),
-      brightness: brightness[0],
-      contrast: contrast[0],
-      saturation: saturation[0],
-      opacity: opacity[0],
+      resX: resX.map((x) => parseInt(x)),
+      resY: resY.map((y) => parseInt(y)),
+      rotationState: rotation.map((r) => parseInt(r)),
+      brightness: brightness,
+      contrast: contrast,
+      saturation: saturation,
+      opacity: opacity,
       outputFormat,
     };
+
+    console.log(imageParameters);
 
     const imageMetaData: ImageMetaData = {
       uploadId,
@@ -141,7 +180,7 @@ export default function Home() {
 
     setProgress(60);
 
-    console.log(imageParameters)
+    console.log(imageParameters);
 
     try {
       const response = await fetch(
@@ -180,34 +219,20 @@ export default function Home() {
     }.${now.getFullYear()}_${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
   };
 
-  const handleResXChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newX = e.target.value;
-    setResX(newX);
+  const handleResChange = (
+    dimension: "resX" | "resY",
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const newValue = e.target.value;
+    const newNum = parseFloat(newValue);
+    if (isNaN(newNum) || newNum <= 0) return;
 
-    const parsedNewX = parseFloat(newX);
-    const parsedResX = parseFloat(resX);
-    const parsedResY = parseFloat(resY);
-
-    if (aspectLocked && parsedNewX > 0 && parsedResX > 0 && parsedResY > 0) {
-      const ratio = parsedNewX / parsedResX;
-      const newY = Math.round(parsedResY * ratio);
-      setResY(newY.toString());
-    }
-  };
-
-  const handleResYChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newY = e.target.value;
-    setResY(newY);
-
-    const parsedNewY = parseFloat(newY);
-    const parsedResX = parseFloat(resX);
-    const parsedResY = parseFloat(resY);
-
-    if (aspectLocked && parsedNewY > 0 && parsedResX > 0 && parsedResY > 0) {
-      const ratio = parsedNewY / parsedResY;
-      const newX = Math.round(parsedResX * ratio);
-      setResX(newX.toString());
-    }
+    const setter = dimension === "resX" ? setResX : setResY;
+    setter((prev) => {
+      const copy = [...prev];
+      copy[index] = newValue;
+      return copy;
+    });
   };
 
   return (
@@ -222,28 +247,41 @@ export default function Home() {
               <div
                 className={`${
                   imageUploaded ? "md:w-1/3" : "w-full"
-                } flex flex-col items-center p-6 bg-white border-4 border-dashed border-blue-100`}
+                } flex flex-col items-center p-6 bg-white border-4 border-dashed border-blue-100 overflow-y-auto`}
               >
                 <div className="text-2xl text-center w-full p-6">
                   Upload Library
                 </div>
 
                 <FileUpload
-                  onImageChange={(filesMap) => {
-                    const files = Array.from(filesMap.values());
+                  onImageChange={(files) => {
                     setImageFiles(files);
                     setImageUploaded(true);
 
                     if (files.length > 0) {
-                      const objectUrl = URL.createObjectURL(files[0]);
-                      setSelectedImage(objectUrl);
+                      const firstObjectUrl = URL.createObjectURL(files[0]);
+                      setSelectedImage([firstObjectUrl, 0]);
+                      initializeDefaults(files.length);
 
-                      const img = new Image();
-                      img.onload = () => {
-                        setResX(img.width.toString());
-                        setResY(img.height.toString());
-                      };
-                      img.src = objectUrl; // ✅ this is the correct and available image URL
+                      // Load dimensions for each image and set resX/resY accordingly
+                      files.forEach((file, idx) => {
+                        const objectUrl = URL.createObjectURL(file);
+                        const img = new Image();
+                        img.onload = () => {
+                          setResX((prev) => {
+                            const oldArray = [...prev];
+                            oldArray[idx] = img.width.toString();
+                            return oldArray;
+                          });
+                          setResY((prev) => {
+                            const copy = [...prev];
+                            copy[idx] = img.height.toString();
+                            return copy;
+                          });
+                          URL.revokeObjectURL(objectUrl); // clean up
+                        };
+                        img.src = objectUrl;
+                      });
                     }
                   }}
                   onImageSelect={setSelectedImage}
@@ -251,12 +289,12 @@ export default function Home() {
               </div>
 
               {/* Image view (right side) */}
-              {imageUploaded && (
+              {imageUploaded && selectedImage && selectedImage[0] && (
                 <>
                   <div className="md:w-2/3 flex items-center justify-center h-full bg-white border border-blue-100">
                     <div className="h-full p-10">
                       <img
-                        src={selectedImage}
+                        src={selectedImage[0]}
                         alt="Uploaded Preview"
                         className="object-cover h-full"
                       />
@@ -286,8 +324,12 @@ export default function Home() {
                           </div>
                           <div className="flex items-center">
                             <Checkbox
-                              checked={overwriteToggle}
-                              onCheckedChange={setOverwriteToggle}
+                              checked={overwriteToggle[index]}
+                              onCheckedChange={() =>
+                                setOverwriteToggle((prev) =>
+                                  updateAtIndex(prev, index, !prev[index])
+                                )
+                              }
                             />
                           </div>
                           <div className="flex items-center">
@@ -300,65 +342,119 @@ export default function Home() {
                             />
                           </div>
                           <div className="flex items-center">
-                            {overwriteToggle && (
+                            {overwriteToggle[index] && (
                               <input
                                 className="border"
-                                value={overwrittenFilename}
+                                value={overwrittenFilename[index]}
                                 onChange={(e) =>
-                                  setOverwrittenFilename(e.target.value)
+                                  setOverwrittenFilename((prev) =>
+                                    updateAtIndex(prev, index, e.target.value)
+                                  )
                                 }
                               />
                             )}
                           </div>
                         </div>
-                        <div className="flex flex-wrap w-full h-full">
-                          {[
-                            {
-                              label: "Brightness",
-                              value: brightness,
-                              setter: setBrightness,
-                            },
-                            {
-                              label: "Contrast",
-                              value: contrast,
-                              setter: setContrast,
-                            },
-                            {
-                              label: "Saturation",
-                              value: saturation,
-                              setter: setSaturation,
-                            },
-                            {
-                              label: "Opacity",
-                              value: opacity,
-                              setter: setOpacity,
-                            },
-                          ].map(({ label, value, setter }) => (
-                            <div
-                              key={label}
-                              className="flex flex-col md:flex-row gap-x-4 pr-5"
-                            >
-                              <div>
-                                <Label>{label}</Label>
-                              </div>
-                              <div className="min-w-36 pt-2.5 md:max-w-56">
-                                <Slider
-                                  defaultValue={[50]}
-                                  max={100}
-                                  step={1}
-                                  value={value}
-                                  onValueChange={setter}
-                                />
-                              </div>
-                              <div>
-                                <Label>{value}</Label>
-                              </div>
-                              <Separator
-                                orientation="vertical"
-                                style={{ backgroundColor: "#909090" }}
+                        <div className="flex flex-wrap w-full h-full gap-y-4">
+                          <div className="flex flex-col md:flex-row gap-x-4 pr-5">
+                            <div>
+                              <Label>Brightness</Label>
+                            </div>
+                            <div className="min-w-36 pt-2.5 md:max-w-56">
+                              <Slider
+                                value={[brightness[index][0] ?? 50]}
+                                onValueChange={(val) =>
+                                  setBrightness((prev) =>
+                                    updateAtIndex(prev, index, val)
+                                  )
+                                }
+                                max={100}
+                                step={1}
                               />
                             </div>
-                          ))}
+                            <div>
+                              <Label>{brightness[index] ?? 50}</Label>
+                            </div>
+                            <Separator
+                              orientation="vertical"
+                              style={{ backgroundColor: "#909090" }}
+                            />
+                          </div>
+
+                          <div className="flex flex-col md:flex-row gap-x-4 pr-5">
+                            <div>
+                              <Label>Contrast</Label>
+                            </div>
+                            <div className="min-w-36 pt-2.5 md:max-w-56">
+                              <Slider
+                                value={[contrast[index]?.[0] ?? 50]}
+                                onValueChange={(val) =>
+                                  setContrast((prev) =>
+                                    updateAtIndex(prev, index, val)
+                                  )
+                                }
+                                max={100}
+                                step={1}
+                              />
+                            </div>
+                            <div>
+                              <Label>{contrast[index] ?? 50}</Label>
+                            </div>
+                            <Separator
+                              orientation="vertical"
+                              style={{ backgroundColor: "#909090" }}
+                            />
+                          </div>
+
+                          <div className="flex flex-col md:flex-row gap-x-4 pr-5">
+                            <div>
+                              <Label>Saturation</Label>
+                            </div>
+                            <div className="min-w-36 pt-2.5 md:max-w-56">
+                              <Slider
+                                value={[saturation[index]?.[0] ?? 50]}
+                                onValueChange={(val) =>
+                                  setSaturation((prev) =>
+                                    updateAtIndex(prev, index, val)
+                                  )
+                                }
+                                max={100}
+                                step={1}
+                              />
+                            </div>
+                            <div>
+                              <Label>{saturation[0][index] ?? 50}</Label>
+                            </div>
+                            <Separator
+                              orientation="vertical"
+                              style={{ backgroundColor: "#909090" }}
+                            />
+                          </div>
+
+                          <div className="flex flex-col md:flex-row gap-x-4 pr-5">
+                            <div>
+                              <Label>Opacity</Label>
+                            </div>
+                            <div className="min-w-36 pt-2.5 md:max-w-56">
+                              <Slider
+                                value={[opacity[index]?.[0] ?? 50]}
+                                onValueChange={(val) =>
+                                  setOpacity((prev) =>
+                                    updateAtIndex(prev, index, val)
+                                  )
+                                }
+                                max={100}
+                                step={1}
+                              />
+                            </div>
+                            <div>
+                              <Label>{opacity[index] ?? 100}</Label>
+                            </div>
+                            <Separator
+                              orientation="vertical"
+                              style={{ backgroundColor: "#909090" }}
+                            />
+                          </div>
                         </div>
                       </div>
                     </TabsContent>
@@ -366,29 +462,28 @@ export default function Home() {
                       <div className="flex flex-wrap items-center gap-4 p-4">
                         <div className="flex flex-col">
                           <Label>Resolution (Width)</Label>
-                          <Input value={resX} onChange={handleResXChange} />
+                          <Input
+                            value={resX[index]}
+                            onChange={(e) => handleResChange("resX", e)}
+                          />
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="self-end mb-1"
-                          onClick={() => setAspectLocked(!aspectLocked)}
-                        >
-                          {aspectLocked ? (
-                            <Link2 className="w-5 h-5" />
-                          ) : (
-                            <Link2Off className="w-5 h-5" />
-                          )}
-                        </Button>
+                        X
                         <div className="flex flex-col">
                           <Label>Resolution (Height)</Label>
-                          <Input value={resY} onChange={handleResYChange} />
+                          <Input
+                            value={resY[index]}
+                            onChange={(e) => handleResChange("resX", e)}
+                          />
                         </div>
                         <div className="flex flex-col">
                           <Label>Rotation (°)</Label>
                           <Input
-                            value={rotation}
-                            onChange={(e) => setRotation(e.target.value)}
+                            value={rotation[index]}
+                            onChange={(e) =>
+                              setRotation((prev) =>
+                                updateAtIndex(prev, index, e.target.value)
+                              )
+                            }
                           />
                         </div>
                       </div>
@@ -397,8 +492,12 @@ export default function Home() {
                       <div className="flex flex-col p-4 gap-4">
                         <Label>Output Format</Label>
                         <Select
-                          value={outputFormat}
-                          onValueChange={setOutputFormat}
+                          value={outputFormat[index]}
+                          onValueChange={(e) =>
+                            setOutputFormat((prev) =>
+                              updateAtIndex(prev, index, e)
+                            )
+                          }
                         >
                           <SelectTrigger className="w-[180px]">
                             <SelectValue placeholder="Select format" />

@@ -49,28 +49,25 @@ def lambda_handler(event, context):
             if not uploadId or not imageNames:
                 return error_response(400, "Missing uploadId or imageName")
 
-            overwrittenFilename = imageParameters.get("overwrittenFilename", "")
-            format = imageParameters.get("format", "").lower()
-            brightness = max(0, min(100, safe_float(imageParameters.get("brightness"), 50)))
-            contrast = max(0, min(100, safe_float(imageParameters.get("contrast"), 50)))
-            saturation = max(0, min(100, safe_float(imageParameters.get("saturation"), 50)))
-            rotation = safe_float(imageParameters.get("rotationState"), 0)
-            resX = int(imageParameters.get("resX", 512))
-            resY = int(imageParameters.get("resY", 512))
-            opacity = max(0, min(100, safe_float(imageParameters.get("opacity"), 100)))
-            if format not in SUPPORTED_FORMATS:
-                format = None
-
-            print(f"UploadId: {uploadId}\n imageNames: {imageNames}\n imageParameters: {imageParameters}")
+            # Get all arrays from imageParameters, or default to empty lists
+            overwrittenFilenames = imageParameters.get("overwrittenFilename", [])
+            resXs = imageParameters.get("resX", [])
+            resYs = imageParameters.get("resY", [])
+            rotationStates = imageParameters.get("rotationState", [])
+            brightnesses = imageParameters.get("brightness", [])
+            contrasts = imageParameters.get("contrast", [])
+            saturations = imageParameters.get("saturation", [])
+            opacities = imageParameters.get("opacity", [])
+            outputFormats = imageParameters.get("outputFormat", [])
 
             imageFileNames = []
             uploaded_urls = []
 
-            for image_key in imageNames:
+            for i, image_key in enumerate(imageNames):
                 print(f"Starting processing for image: {image_key}")
+
                 response = s3.get_object(Bucket=BUCKET_NAME, Key=image_key)
                 file_obj = response.get("Body")
-
                 if file_obj is None:
                     raise ValueError(f"S3 object body is None for key {image_key}")
 
@@ -83,6 +80,29 @@ def lambda_handler(event, context):
                 if original_format not in SUPPORTED_FORMATS:
                     return error_response(400, f"Unsupported image format: {original_format}")
                 print("Original image loaded.")
+
+                # Use parameter at index i or fallback defaults if missing or out of range
+                overwrittenFilename = overwrittenFilenames[i] if i < len(overwrittenFilenames) else ""
+                format = outputFormats[i].lower() if i < len(outputFormats) else ""
+                brightness_arr = brightnesses[i] if i < len(brightnesses) else [50]
+                contrast_arr = contrasts[i] if i < len(contrasts) else [50]
+                saturation_arr = saturations[i] if i < len(saturations) else [50]
+                opacity_arr = opacities[i] if i < len(opacities) else [100]
+                rotation = float(rotationStates[i]) if i < len(rotationStates) else 0
+                resX = int(resXs[i]) if i < len(resXs) else 512
+                resY = int(resYs[i]) if i < len(resYs) else 512
+
+                # Your sliders have number[][] — so extract value from the inner array (usually first element)
+                brightness = max(0, min(100, safe_float(brightness_arr[0], 50)))
+                contrast = max(0, min(100, safe_float(contrast_arr[0], 50)))
+                saturation = max(0, min(100, safe_float(saturation_arr[0], 50)))
+                opacity = max(0, min(100, safe_float(opacity_arr[0], 100)))
+                
+                print(brightness_arr)
+                print(brightness)
+
+                if format not in SUPPORTED_FORMATS:
+                    format = None
 
                 # Resize
                 new_size = (resX, resY)
@@ -126,8 +146,7 @@ def lambda_handler(event, context):
                 else:
                     print("Opacity unchanged (100%).")
 
-
-                # Operations done -> saving image
+                # Save image with unique filename
                 file_ext = format or (original_format if original_format in SUPPORTED_FORMATS else "jpg")
                 new_uuid = str(uuid.uuid4())
                 base_name = overwrittenFilename or image_key.split("/")[-1].split(".")[0]
@@ -165,6 +184,7 @@ def lambda_handler(event, context):
             error_msg = f"Unexpected error [{type(e).__name__}]: {str(e)}\n{traceback.format_exc()}"
             print(error_msg)
             return error_response(500, error_msg)
+
 
     elif http_method == "DELETE":
         return error_response(405, "DELETE not implemented")

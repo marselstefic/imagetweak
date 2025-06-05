@@ -40,7 +40,9 @@ export default function RootLayout({
             <ClerkLoaded>
               {/* Left - Logo */}
               <div className="flex items-center">
-                <Image src="/logo2.png" alt="logo" width={100} height={100} />
+                <Link href="/uploads">
+                  <Image src="/logo2.png" alt="logo" width={100} height={100} />
+                </Link>
               </div>
 
               {/* Center - Nav Links */}

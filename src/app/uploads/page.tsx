@@ -51,6 +51,9 @@ export default function Home() {
   const [resY, setResY] = useState<string[]>([]);
   const [rotation, setRotation] = useState<string[]>([]);
   const [outputFormat, setOutputFormat] = useState<string[]>([]);
+
+  const [filter, setFilter] = useState<string[]>([]);
+
   const [progress, setProgress] = useState(0);
 
   const { toast } = useToast();
@@ -74,6 +77,7 @@ export default function Home() {
     setOutputFormat((prev) => mergeDefaults(prev, count, "png"));
     setOverwriteToggle((prev) => mergeDefaults(prev, count, false));
     setOverwrittenFilename((prev) => mergeDefaults(prev, count, ""));
+    setFilter((prev) => mergeDefaults(prev, count, "none"));
   };
 
   function mergeDefaults<T>(
@@ -120,6 +124,7 @@ export default function Home() {
       saturation: saturation,
       opacity: opacity,
       outputFormat,
+      filter,
     };
 
     console.log(imageParameters);
@@ -133,6 +138,15 @@ export default function Home() {
     };
 
     const formData = new FormData();
+
+    imageMetaData.imageName = imageNames.map((name) => {
+      const parts = name.split(".");
+      const base = parts.slice(0, -1).join(".") || name; // Handle no-extension case
+      return `${base}.${outputFormat[index].toLowerCase()}`;
+    });
+
+    console.log(imageMetaData.imageName);
+
     formData.append(
       "metadata",
       new Blob([JSON.stringify(imageMetaData)], { type: "application/json" })
@@ -297,6 +311,15 @@ export default function Home() {
                         src={selectedImage[0]}
                         alt="Uploaded Preview"
                         className="object-cover h-full"
+                        style={{
+                          filter: `
+                            brightness(${(brightness[index]?.[0] ?? 50) / 50})
+                            contrast(${(contrast[index]?.[0] ?? 50) / 50})
+                            saturate(${(saturation[index]?.[0] ?? 50) / 50})
+                          `,
+                          opacity: (opacity[index]?.[0] ?? 100) / 100,
+                          transition: "filter 0.2s ease, opacity 0.2s ease", // for smooth updates
+                        }}
                       />
                     </div>
                   </div>
@@ -314,6 +337,7 @@ export default function Home() {
                     <TabsTrigger value="colors">Colors</TabsTrigger>
                     <TabsTrigger value="scaling">Scaling</TabsTrigger>
                     <TabsTrigger value="format">Format</TabsTrigger>
+                    <TabsTrigger value="filters">Filters</TabsTrigger>
                   </TabsList>
                   <form onSubmit={handleSubmit} className="w-full">
                     <TabsContent value="colors">
@@ -423,7 +447,7 @@ export default function Home() {
                               />
                             </div>
                             <div>
-                              <Label>{saturation[0][index] ?? 50}</Label>
+                              <Label>{saturation[index] ?? 50}</Label>
                             </div>
                             <Separator
                               orientation="vertical"
@@ -507,7 +531,29 @@ export default function Home() {
                             <SelectItem value="jpg">JPG</SelectItem>
                             <SelectItem value="jpeg">JPEG</SelectItem>
                             <SelectItem value="webp">WEBP</SelectItem>
-                            <SelectItem value="tiff">TIFF</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="filters">
+                      <div className="flex flex-col p-4 gap-4">
+                        <Label>Filter</Label>
+                        <Select
+                          value={filter[index]}
+                          onValueChange={(val) =>
+                            setFilter((prev) => updateAtIndex(prev, index, val))
+                          }
+                        >
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Select filter" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">None</SelectItem>
+                            <SelectItem value="grayscale">
+                              Black & White
+                            </SelectItem>
+                            <SelectItem value="sepia">Sepia</SelectItem>
+                            <SelectItem value="invert">Invert</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

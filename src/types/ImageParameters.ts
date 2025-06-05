@@ -8,4 +8,5 @@ export type ImageParameters = {
   saturation: number[][];
   opacity: number[][];
   outputFormat: string[];
+  filter: string[]
 };

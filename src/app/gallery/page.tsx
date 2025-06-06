@@ -5,6 +5,7 @@ import { SignedIn, SignedOut, useUser } from "@clerk/nextjs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchImage, deleteImageData } from "@/lib/actions";
 import { RefreshCw, X, Trash2, Download } from "lucide-react";
+import { imageResults } from "@/types/imageResults";
 
 export default function Home() {
   const { user, isLoaded } = useUser();
@@ -24,21 +25,35 @@ export default function Home() {
   const loadImages = async () => {
     try {
       if (!isLoaded || !user?.id) return;
-      const result = await fetchImage(user.id);
-      if (!result) {
+
+      const response = await fetchImage(user.id);
+      const imageResults: imageResults = response?.imageResults ?? {
+        imageNames: [],
+        imageContent: [],
+        imageNameOverwrite: [],
+      };
+      console.log("Fetched imageResults:", imageResults);
+
+      if (imageResults.imageNames.length === 0) {
         setImages(null);
         setEditedNames(null);
         setOriginalToEdited(null);
         return;
       }
 
-      const originalNames = Array.from(result.keys());
-      const edited = originalNames.map(name => name.split("_")[1]); // "user_edited.png" => "edited.png"
-      const mapping = new Map<string, string>(
-        edited.map((editedName, i) => [editedName, originalNames[i]])
-      );
+      // imageResults is an object with arrays, so just extract arrays:
+      const originalNames = imageResults.imageNames; // string[]
+      const edited = imageResults.imageNameOverwrite.map((name, i) =>
+        name === "" || name === undefined ? originalNames[i] : name
+      ); // string[]
 
-      setImages(Array.from(result.values()));
+      // Map editedName -> originalName
+      const mapping = new Map<string, string>();
+      for (let i = 0; i < originalNames.length; i++) {
+        mapping.set(edited[i], originalNames[i]);
+      }
+
+      setImages(imageResults.imageContent); // string[]
       setEditedNames(edited);
       setOriginalToEdited(mapping);
     } catch (err) {
@@ -118,7 +133,9 @@ export default function Home() {
               images.map((img, i) => (
                 <div key={i} className="flex flex-col">
                   <img
-                    src={`data:image/${getExtension(editedNames[i])};base64,${img}`}
+                    src={`data:image/${getExtension(
+                      editedNames[i]
+                    )};base64,${img}`}
                     alt={`Uploaded image ${i + 1}`}
                     title={editedNames[i]}
                     onClick={() => {

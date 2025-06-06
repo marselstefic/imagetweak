@@ -1,7 +1,11 @@
 "use server";
 
 import { ImageMetaData } from "@/types/ImageMetaData";
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+} from "@aws-sdk/client-s3";
 import {
   DeleteCommand,
   PutCommand,
@@ -11,6 +15,7 @@ import {
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { dynamoDb, s3Client } from "./dynamodb";
+import { imageResults } from "@/types/imageResults";
 
 import sharp from "sharp";
 
@@ -50,8 +55,14 @@ export async function uploadImageMetaData(
 
 export async function fetchImage(
   user: string
-): Promise<Map<string, string> | null> {
-  let allImages: string[];
+): Promise<{ imageResults: imageResults } | null> {
+  // Initialize the combined results object
+  const imageResults: imageResults = {
+    imageNames: [],
+    imageContent: [],
+    imageNameOverwrite: [],
+  };
+
   try {
     const command = new QueryCommand({
       TableName: "ImageMetaData",
@@ -63,16 +74,15 @@ export async function fetchImage(
       ExpressionAttributeValues: {
         ":userVal": user,
       },
-      ProjectionExpression: "imageName, startTime",
+      ProjectionExpression: "imageName, startTime, imageParameters",
     });
 
     const { Items } = await dynamoDb.send(command);
-
     console.log("Amount of items: ", Items?.length ?? 0);
 
     const items = Items ?? [];
 
-    //sorting by startTime (too lazy so I sort it in client)
+    // Sort items by startTime descending
     items.sort((a, b) => {
       const parseStartTime = (str: string) => {
         const [datePart, timePart] = str.split("_");
@@ -87,15 +97,27 @@ export async function fetchImage(
       );
     });
 
-    allImages = items?.flatMap((item) => item.imageName ?? []) ?? [];
+    // Combine all imageNames and overwrittenFilename arrays into one big array each
+    for (const item of items) {
+      if (item.imageName && Array.isArray(item.imageName)) {
+        imageResults.imageNames.push(...item.imageName);
+      }
+      if (
+        item.imageParameters?.overwrittenFilename &&
+        Array.isArray(item.imageParameters.overwrittenFilename)
+      ) {
+        imageResults.imageNameOverwrite.push(
+          ...item.imageParameters.overwrittenFilename
+        );
+      }
+    }
   } catch (error) {
-    console.error("Dynamo Db fetching failed:", error);
-    throw new Error("Failed to fetch image meta data");
+    console.error("DynamoDB fetching failed:", error);
+    throw new Error("Failed to fetch image metadata");
   }
 
-  const imageReceived: Map<string, string> = new Map();
-
-  for (const imageKey of allImages) {
+  // Now fetch the image content from S3 for each image key
+  for (const imageKey of imageResults.imageNames) {
     try {
       const params = {
         Bucket: process.env.AWS_S3_BUCKET_NAME!,
@@ -105,24 +127,26 @@ export async function fetchImage(
       console.log("📦 Attempting S3 fetch for key:", imageKey);
 
       const command = new GetObjectCommand(params);
-      const result = await s3Client.send(command);
+      const s3Result = await s3Client.send(command);
 
-      console.log("base64Strings:" + result.Body);
-      const base64String = await streamToBase64(result.Body);
-      imageReceived.set(imageKey, base64String);
+      const base64String = await streamToBase64(s3Result.Body);
+      imageResults.imageContent.push(base64String);
     } catch (error) {
-      console.error("S3 Fetch Error:", error);
-      throw new Error("Failed to fetch image");
+      console.error("S3 Fetch Error for key:", imageKey, error);
+      // You can decide whether to throw or continue here, I'm continuing:
+      imageResults.imageContent.push(""); // keep array lengths consistent
     }
   }
 
-  return imageReceived.size > 0 ? imageReceived : null;
+  return imageResults.imageNames.length > 0 ? { imageResults } : null;
 }
 
-export async function deleteImageData(imageNameToDelete: string): Promise<void> {
+export async function deleteImageData(
+  imageNameToDelete: string
+): Promise<void> {
   const bucketName = process.env.AWS_S3_BUCKET_NAME as string;
 
-  console.log("TO DELETE: " + imageNameToDelete)
+  console.log("TO DELETE: " + imageNameToDelete);
 
   // 1. Delete from S3
   try {
@@ -169,12 +193,17 @@ export async function deleteImageData(imageNameToDelete: string): Promise<void> 
       );
       console.log(`Deleted entire DynamoDB entry with uploadId: ${uploadId}`);
     } catch (err) {
-      console.error(`Failed to delete DynamoDB entry with uploadId: ${uploadId}`, err);
+      console.error(
+        `Failed to delete DynamoDB entry with uploadId: ${uploadId}`,
+        err
+      );
       throw new Error("Failed to delete DynamoDB entry.");
     }
   } else {
     // 3b. Multiple images — remove just the imageName and update
-    const updatedImageNames = imageName.filter((n: string) => n !== imageNameToDelete);
+    const updatedImageNames = imageName.filter(
+      (n: string) => n !== imageNameToDelete
+    );
 
     try {
       await dynamoDb.send(
@@ -187,9 +216,14 @@ export async function deleteImageData(imageNameToDelete: string): Promise<void> 
           },
         })
       );
-      console.log(`Removed ${imageNameToDelete} from imageName array in DynamoDB`);
+      console.log(
+        `Removed ${imageNameToDelete} from imageName array in DynamoDB`
+      );
     } catch (err) {
-      console.error(`Failed to update DynamoDB entry for uploadId: ${uploadId}`, err);
+      console.error(
+        `Failed to update DynamoDB entry for uploadId: ${uploadId}`,
+        err
+      );
       throw new Error("Failed to update DynamoDB imageName array.");
     }
   }

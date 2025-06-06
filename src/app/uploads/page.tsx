@@ -139,8 +139,11 @@ export default function Home() {
 
     const formData = new FormData();
 
-    imageMetaData.imageName = imageNames.map((name) => {
+    imageMetaData.imageName = imageNames.map((name, i) => {
       const parts = name.split(".");
+      if(overwrittenFilename[i] != ""){
+        return `${overwrittenFilename[i]}.${outputFormat[index].toLowerCase()}`;
+      }
       const base = parts.slice(0, -1).join(".") || name; // Handle no-extension case
       return `${base}.${outputFormat[index].toLowerCase()}`;
     });
